@@ -8,6 +8,25 @@ Settings
 - aks cluster name is `protohacker-aks`
 - Application will run on port `3001`
 
+AKS cluster is created by 
+
+```sh 
+az aks create \
+  --resource-group protohacker \
+  --name protohacker-aks \
+  --node-count 1 \
+  --enable-cluster-autoscaler \
+  --min-count 1 \
+  --max-count 1 \
+  --vm-set-type VirtualMachineScaleSets \
+  --node-vm-size Standard_B2s \
+  --generate-ssh-keys \
+  --disable-rbac \
+  --attach-acr "" \
+  --network-plugin kubenet \
+  --skip-subnet-role-assignment
+```
+
 ## 1. Update `mix.exs` to include release config 
 
 ```elixir 
@@ -42,7 +61,10 @@ end
 
 ```yaml 
 # Stage 1: Build the release
-FROM elixir:1.18-slim as builder
+FROM elixir:1.18-slim AS builder
+
+# Set environment to production
+ENV MIX_ENV=prod
 
 # Install build tools
 RUN apt-get update && apt-get install -y build-essential git
@@ -105,7 +127,8 @@ az acr login --name protohackeracr
 ACR_LOGIN_SERVER=$(az acr show --name protohackeracr --query loginServer --output tsv)
 
 # Tag and push the image:
-docker build -t protohacker:latest .
+az acr login --name protohackeracr
+docker buildx build -t protohacker:latest .
 docker tag protohacker:latest $ACR_LOGIN_SERVER/protohacker:v1
 docker push $ACR_LOGIN_SERVER/protohacker:v1
 ```
@@ -118,7 +141,6 @@ az aks get-credentials \
   --name protohacker-aks
 
 # verify 
-kubectl cluster-info
 kubectl get nodes  
 ```
 
@@ -132,7 +154,7 @@ metadata:
   labels:
     app: protohacker
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: protohacker
@@ -177,14 +199,16 @@ az acr credential show --name protohackeracr --query "passwords[0].value" -o tsv
 kubectl create secret docker-registry acr-secret \
   --docker-server=protohackeracr.azurecr.io \
   --docker-username=protohackeracr \
-  --docker-password=<ACR_PASSWORD> \
-  --docker-email=not@used.com
+  --docker-email=not@used.com \
+  --docker-password=<ACR_PASSWORD> 
 ```
 
 ## 7. Apply the Deployment
 
 ```sh 
 kubectl apply -f k8s/deployment.yaml
+# scale down to one pod
+kubectl scale deployment protohacker --replicas=1
 ```
 
 ## 8. Check Deployment Status
