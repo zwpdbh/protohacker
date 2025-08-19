@@ -1,7 +1,7 @@
 defmodule Protohacker.EchoServer do
   require Logger
   use GenServer
-  @port 5000
+  @port 3000
 
   def start_link([] = _opts) do
     GenServer.start_link(__MODULE__, :no_state)
@@ -62,5 +62,9 @@ defmodule Protohacker.EchoServer do
         Logger.warning("->> recv failed: #{inspect(reason)}")
         :error
     end
+  end
+
+  def port do
+    @port
   end
 end
