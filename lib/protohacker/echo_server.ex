@@ -45,31 +45,22 @@ defmodule Protohacker.EchoServer do
   end
 
   defp handle_connection(socket) do
-    Logger.info("->> handle_connection: #{inspect(socket)}")
-
-    case recv_until_closed(socket, _buffer = "") do
-      {:ok, data} ->
-        Logger.info("->> echo back data: #{inspect(data)}")
-        :gen_tcp.send(socket, data)
-
-      {:error, reason} ->
-        Logger.error("->> failed to receive data: #{inspect(reason)}")
-    end
-
+    loop_echo(socket)
     :gen_tcp.close(socket)
   end
 
-  defp recv_until_closed(socket, buffer) do
-    case :gen_tcp.recv(socket, 0, 10_000) do
+  defp loop_echo(socket) do
+    case :gen_tcp.recv(socket, 0) do
       {:ok, data} ->
-        Logger.info("->> received data: #{inspect(data)}")
-        recv_until_closed(socket, buffer <> data)
+        :gen_tcp.send(socket, data)
+        loop_echo(socket)
 
       {:error, :closed} ->
-        {:ok, buffer}
+        :ok
 
       {:error, reason} ->
-        {:error, reason}
+        Logger.warning("->> recv failed: #{inspect(reason)}")
+        :error
     end
   end
 end
