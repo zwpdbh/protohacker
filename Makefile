@@ -5,3 +5,6 @@ deploy:
 
 run_app:
 	mix run --no-halt
+
+run_dev:
+	iex -S mix

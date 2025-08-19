@@ -11,6 +11,6 @@ defmodule Protohacker.EchoServerTest do
     assert :gen_tcp.send(socket, "bar") == :ok
     :gen_tcp.shutdown(socket, :write)
 
-    assert :gen_tcp.recv(socket, 0, port) == {:ok, "foobar"}
+    assert :gen_tcp.recv(socket, 0, 5000) == {:ok, "foobar"}
   end
 end

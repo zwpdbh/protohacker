@@ -1,0 +1,116 @@
+defmodule Protohacker.PrimeTime do
+  require Logger
+  use GenServer
+  @port 3003
+
+  def start_link([] = _opts) do
+    GenServer.start_link(__MODULE__, :no_state)
+  end
+
+  defstruct [
+    :listen_socket
+  ]
+
+  @impl true
+  def init(:no_state) do
+    listen_options = [
+      mode: :binary,
+      active: false,
+      reuseaddr: true,
+      exit_on_close: false
+    ]
+
+    case :gen_tcp.listen(@port, listen_options) do
+      {:ok, listen_socket} ->
+        state = %__MODULE__{listen_socket: listen_socket}
+
+        {:ok, state, {:continue, :accept}}
+
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  @impl true
+  def handle_continue(:accept, %__MODULE__{} = state) do
+    case :gen_tcp.accept(state.listen_socket) do
+      {:ok, socket} ->
+        Task.start(fn -> handle_connection(socket) end)
+        {:noreply, state, {:continue, :accept}}
+
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  defp handle_connection(socket) do
+    case read_line(socket, _buffer = "") do
+      {:ok, line, rest} ->
+        with {:ok, command} <- Jason.decode(line),
+             {:ok, number} <- validate_request(command) do
+          result = Math.prime?(number)
+
+          Logger.info("->> #{number} is prime: #{result}")
+          :gen_tcp.send(socket, Jason.encode!(%{"method" => "isPrime", "prime" => result}))
+        end
+
+        read_line(socket, rest)
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("->> error while read line, reason: #{inspect(reason)}")
+        :error
+    end
+  end
+
+  defp read_line(socket, buffer) do
+    case :gen_tcp.recv(socket, 0, 10_000) do
+      {:ok, data} ->
+        buffer = buffer <> data
+
+        case split_line(buffer) do
+          {:ok, line, rest} -> {:ok, line, rest}
+          {:error, buffer} -> read_line(socket, buffer)
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp split_line(buffer) do
+    buffer |> dbg()
+
+    case String.split(buffer, "\n", parts: 2) do
+      [line, rest] -> {:ok, line, rest}
+      _ -> {:error, buffer}
+    end
+  end
+
+  defp validate_request(%{"method" => "isPrime", "number" => number})
+       when is_number(number) do
+    {:ok, number}
+  end
+
+  defp validate_request(_) do
+    {:error, "Invalid request: must have method='isPrime' and a numeric 'number' field"}
+  end
+
+  def port do
+    @port
+  end
+end
+
+defmodule Protohacker.PrimeTime.Play do
+  def run() do
+    port = Protohacker.PrimeTime.port()
+
+    {:ok, socket} =
+      :gen_tcp.connect(~c"localhost", port, mode: :binary, active: false)
+
+    :gen_tcp.send(socket, ~s({"method": "isPrime", "number": "123"}\n))
+
+    :gen_tcp.shutdown(socket, :write)
+    :gen_tcp.recv(socket, 0, 5000) |> dbg()
+  end
+end
