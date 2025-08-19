@@ -1,7 +1,7 @@
 defmodule Protohacker.EchoServer do
   require Logger
   use GenServer
-  @port 3000
+  @port 3001
 
   def start_link([] = _opts) do
     GenServer.start_link(__MODULE__, :no_state)
