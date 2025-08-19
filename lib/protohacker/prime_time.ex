@@ -2,6 +2,7 @@ defmodule Protohacker.PrimeTime do
   require Logger
   use GenServer
   @port 3003
+  @malformed ~s({"method": "isPrime", "number": "123")
 
   def start_link([] = _opts) do
     GenServer.start_link(__MODULE__, :no_state)
@@ -52,6 +53,9 @@ defmodule Protohacker.PrimeTime do
 
           Logger.info("->> #{number} is prime: #{result}")
           :gen_tcp.send(socket, Jason.encode!(%{"method" => "isPrime", "prime" => result}))
+        else
+          {:error, :malformed} ->
+            :gen_tcp.send(socket, @malformed)
         end
 
         read_line(socket, rest)
@@ -81,7 +85,7 @@ defmodule Protohacker.PrimeTime do
   defp split_line(buffer) do
     buffer |> dbg()
 
-    case String.split(buffer, "\n", parts: 2) do
+    case String.split(buffer, ~r{\n}, parts: 2) do
       [line, rest] -> {:ok, line, rest}
       _ -> {:error, buffer}
     end
@@ -93,7 +97,7 @@ defmodule Protohacker.PrimeTime do
   end
 
   defp validate_request(_) do
-    {:error, "Invalid request: must have method='isPrime' and a numeric 'number' field"}
+    {:error, :malformed}
   end
 
   def port do
