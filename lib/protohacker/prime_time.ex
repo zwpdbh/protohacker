@@ -76,6 +76,8 @@ defmodule Protohacker.PrimeTime do
             {:error, :malformed}
 
           {:error, reason} ->
+            Logger.info("->> error, reason: #{inspect(reason)}")
+
             :gen_tcp.send(socket, @malformed_response)
             :gen_tcp.close(socket)
 
@@ -127,7 +129,8 @@ defmodule Protohacker.PrimeTime do
     end
   end
 
-  defp validate_request(_) do
+  defp validate_request(unknown) do
+    Logger.info("->> validate_request unknown: #{inspect(unknown)}")
     {:error, :malformed}
   end
 
@@ -157,12 +160,11 @@ defmodule Protohacker.PrimeTime.Play do
 
     {:ok, socket} =
       :gen_tcp.connect(~c"135.237.56.239", 3002, mode: :binary, active: false)
-      |> dbg()
 
     :gen_tcp.send(socket, ~s({"method": "isPrime", "number": "123"}) <> "\n")
 
     :gen_tcp.shutdown(socket, :write)
-    {:ok, response} = :gen_tcp.recv(socket, 0, 5000) |> dbg()
+    {:ok, response} = :gen_tcp.recv(socket, 0, 5000)
 
     response
     |> Jason.decode()

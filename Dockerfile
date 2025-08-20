@@ -28,6 +28,9 @@ RUN mix release
 # Stage 2: Runtime image
 FROM ubuntu:22.04
 
+# 👉 Add UTF-8 fix: Set Erlang to force Unicode
+ENV ELIXIR_ERL_OPTIONS="+fnu"
+
 RUN apt-get update && apt-get install -y libssl3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
