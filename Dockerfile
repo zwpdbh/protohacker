@@ -28,6 +28,9 @@ RUN mix release
 # Stage 2: Runtime image
 FROM ubuntu:22.04
 
+# 👉 Add UTF-8 fix: Set Erlang to force Unicode
+ENV ELIXIR_ERL_OPTIONS="+fnu"
+
 RUN apt-get update && apt-get install -y libssl3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -42,7 +45,7 @@ RUN chown -R 1000:1000 /app && chmod +x bin/protohacker
 USER 1000
 
 # Expose port (if your app listens on one)
-EXPOSE 3001
+EXPOSE 3001 3003
 
 # Start the app
 CMD ["bin/protohacker", "start"]
