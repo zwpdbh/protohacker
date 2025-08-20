@@ -23,6 +23,8 @@ defmodule Protohacker.PrimeTime do
 
     case :gen_tcp.listen(@port, listen_options) do
       {:ok, listen_socket} ->
+        Logger.info("->> start prime_time server at: #{inspect(@port)}")
+
         state = %__MODULE__{listen_socket: listen_socket}
 
         {:ok, state, {:continue, :accept}}
@@ -83,17 +85,17 @@ defmodule Protohacker.PrimeTime do
   end
 
   defp split_line(buffer) do
-    buffer |> dbg()
-
     case String.split(buffer, ~r{\n}, parts: 2) do
-      [line, rest] -> {:ok, line, rest}
-      _ -> {:error, buffer}
+      [line, rest] ->
+        {:ok, line, rest}
+
+      _ ->
+        {:error, buffer}
     end
   end
 
-  defp validate_request(%{"method" => "isPrime", "number" => number})
-       when is_number(number) do
-    {:ok, number}
+  defp validate_request(%{"method" => "isPrime", "number" => number}) do
+    {:ok, String.to_integer(number)}
   end
 
   defp validate_request(_) do
@@ -106,7 +108,22 @@ defmodule Protohacker.PrimeTime do
 end
 
 defmodule Protohacker.PrimeTime.Play do
-  def run() do
+  def run_is_prime() do
+    port = Protohacker.PrimeTime.port()
+
+    {:ok, socket} =
+      :gen_tcp.connect(~c"localhost", port, mode: :binary, active: false)
+
+    :gen_tcp.send(socket, ~s({"method": "isPrime", "number": "7"}\n))
+
+    :gen_tcp.shutdown(socket, :write)
+    {:ok, response} = :gen_tcp.recv(socket, 0, 5000)
+
+    response
+    |> Jason.decode!()
+  end
+
+  def run_is_not_prime() do
     port = Protohacker.PrimeTime.port()
 
     {:ok, socket} =
@@ -115,6 +132,9 @@ defmodule Protohacker.PrimeTime.Play do
     :gen_tcp.send(socket, ~s({"method": "isPrime", "number": "123"}\n))
 
     :gen_tcp.shutdown(socket, :write)
-    :gen_tcp.recv(socket, 0, 5000) |> dbg()
+    {:ok, response} = :gen_tcp.recv(socket, 0, 5000)
+
+    response
+    |> Jason.decode!()
   end
 end

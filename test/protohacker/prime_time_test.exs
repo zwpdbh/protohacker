@@ -11,7 +11,7 @@ defmodule Protohacker.PrimeTimeTest do
       assert :gen_tcp.send(socket, ~s({"method": "isPrime", "number": "123"}\n))
 
       :gen_tcp.shutdown(socket, :write)
-      assert :gen_tcp.recv(socket, 0, 5000) == {:ok, ~s({"method":"isPrime", "prime":false})}
+      assert :gen_tcp.recv(socket, 0, 5000) == {:ok, ~s({"method":"isPrime","prime":false})}
     end
   end
 end

@@ -22,7 +22,7 @@ defmodule Protohacker.EchoServer do
 
     case(:gen_tcp.listen(@port, listen_options)) do
       {:ok, listen_socket} ->
-        Logger.info("Start echo server on port: #{@port}")
+        Logger.info("->> start echo server at: #{inspect(@port)}")
 
         state = %__MODULE__{listen_socket: listen_socket}
         {:ok, state, {:continue, :accept}}
