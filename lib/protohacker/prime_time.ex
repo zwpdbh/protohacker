@@ -2,7 +2,7 @@ defmodule Protohacker.PrimeTime do
   require Logger
   use GenServer
   @port 3003
-  @malformed_response ~s({"method":"isPrime","prime":invalid})
+  @malformed_response ~s({"method":"isPrime","prime": "invalid"})
 
   def start_link([] = _opts) do
     GenServer.start_link(__MODULE__, :no_state)
@@ -59,20 +59,30 @@ defmodule Protohacker.PrimeTime do
 
           Logger.info("->> #{number} is prime: #{result}")
           json_response = Jason.encode!(%{"method" => "isPrime", "prime" => result})
+
           :gen_tcp.send(socket, json_response <> "\n")
+          read_line_loop(socket, rest)
         else
           {:error, :not_integer} ->
-            :gen_tcp.send(socket, ~s({"method":"isPrime","prime":false}) <> "\n")
+            json_response = Jason.encode!(%{"method" => "isPrime", "prime" => false})
+
+            :gen_tcp.send(socket, json_response <> "\n")
+            read_line_loop(socket, rest)
 
           {:error, :malformed} ->
             :gen_tcp.send(socket, @malformed_response)
             :gen_tcp.close(socket)
 
             {:error, :malformed}
+
+          {:error, reason} ->
+            :gen_tcp.send(socket, @malformed_response)
+            :gen_tcp.close(socket)
+
+            {:error, reason}
         end
 
-        read_line_loop(socket, rest)
-        :ok
+        {:ok, :stop_loop}
 
       {:error, reason} ->
         :gen_tcp.close(socket)
@@ -110,7 +120,7 @@ defmodule Protohacker.PrimeTime do
   end
 
   defp validate_request(%{"method" => "isPrime", "number" => n}) when is_float(n) do
-    if n == :math.floor(n) and n > 1 do
+    if n == trunc(n) do
       {:ok, trunc(n)}
     else
       {:error, :not_integer}
@@ -143,17 +153,19 @@ defmodule Protohacker.PrimeTime.Play do
   end
 
   def run_is_not_prime() do
-    port = Protohacker.PrimeTime.port()
+    # port = Protohacker.PrimeTime.port()
 
     {:ok, socket} =
-      :gen_tcp.connect(~c"localhost", port, mode: :binary, active: false)
+      :gen_tcp.connect(~c"135.237.56.239", 3002, mode: :binary, active: false)
+      |> dbg()
 
-    :gen_tcp.send(socket, ~s({"method": "isPrime", "number": "123"}\n))
+    :gen_tcp.send(socket, ~s({"method": "isPrime", "number": "123"}) <> "\n")
 
     :gen_tcp.shutdown(socket, :write)
-    {:ok, response} = :gen_tcp.recv(socket, 0, 5000)
+    {:ok, response} = :gen_tcp.recv(socket, 0, 5000) |> dbg()
 
     response
-    |> Jason.decode!()
+    |> Jason.decode()
+    |> dbg()
   end
 end
