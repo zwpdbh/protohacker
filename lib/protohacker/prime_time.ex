@@ -2,7 +2,7 @@ defmodule Protohacker.PrimeTime do
   require Logger
   use GenServer
   @port 3003
-  @malformed ~s({"method": "isPrime", "number": "123")
+  @malformed_response ~s({"method":"isPrime","prime":invalid})
 
   def start_link([] = _opts) do
     GenServer.start_link(__MODULE__, :no_state)
@@ -47,25 +47,36 @@ defmodule Protohacker.PrimeTime do
   end
 
   defp handle_connection(socket) do
-    case read_line(socket, _buffer = "") do
+    read_line_loop(socket, _buffer = "")
+  end
+
+  defp read_line_loop(socket, buffer) do
+    case read_line(socket, buffer) do
       {:ok, line, rest} ->
         with {:ok, command} <- Jason.decode(line),
              {:ok, number} <- validate_request(command) do
           result = Math.prime?(number)
 
           Logger.info("->> #{number} is prime: #{result}")
-          :gen_tcp.send(socket, Jason.encode!(%{"method" => "isPrime", "prime" => result}))
+          json_response = Jason.encode!(%{"method" => "isPrime", "prime" => result})
+          :gen_tcp.send(socket, json_response <> "\n")
         else
+          {:error, :not_integer} ->
+            :gen_tcp.send(socket, ~s({"method":"isPrime","prime":false}) <> "\n")
+
           {:error, :malformed} ->
-            :gen_tcp.send(socket, @malformed)
+            :gen_tcp.send(socket, @malformed_response)
+            :gen_tcp.close(socket)
+
+            {:error, :malformed}
         end
 
-        read_line(socket, rest)
+        read_line_loop(socket, rest)
         :ok
 
       {:error, reason} ->
-        Logger.warning("->> error while read line, reason: #{inspect(reason)}")
-        :error
+        :gen_tcp.close(socket)
+        {:error, reason}
     end
   end
 
@@ -94,8 +105,16 @@ defmodule Protohacker.PrimeTime do
     end
   end
 
-  defp validate_request(%{"method" => "isPrime", "number" => number}) do
-    {:ok, String.to_integer(number)}
+  defp validate_request(%{"method" => "isPrime", "number" => n}) when is_integer(n) do
+    {:ok, n}
+  end
+
+  defp validate_request(%{"method" => "isPrime", "number" => n}) when is_float(n) do
+    if n == :math.floor(n) and n > 1 do
+      {:ok, trunc(n)}
+    else
+      {:error, :not_integer}
+    end
   end
 
   defp validate_request(_) do
