@@ -5,7 +5,8 @@ set -euo pipefail
 ACR_NAME=protohackeracr
 APP_NAME=protohacker
 DEPLOYMENT_NAME=protohacker
-NAMESPACE=default   # change if you deploy to another namespace
+NAMESPACE=default
+MANIFEST_FILE=k8s/deployment.yaml   # 👈 point to your YAML
 
 echo "🔑 Logging into Azure Container Registry..."
 az acr login --name $ACR_NAME
@@ -23,6 +24,11 @@ docker tag $APP_NAME:latest $IMAGE_NAME
 echo "📤 Pushing image to ACR..."
 docker push $IMAGE_NAME
 
+# 🔁 Apply the full manifest (Deployment + Service)
+echo ".ApplyResources manifest to ensure Service and Deployment are up to date..."
+kubectl apply -f $MANIFEST_FILE --namespace $NAMESPACE
+
+# 🖼️ Now update just the image
 echo "🚀 Updating AKS Deployment $DEPLOYMENT_NAME with new image..."
 kubectl set image deployment/$DEPLOYMENT_NAME \
   $APP_NAME=$IMAGE_NAME \
