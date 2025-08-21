@@ -56,4 +56,4 @@ spec:
     - protocol: TCP
       port: 3006
       targetPort: 3007
-      name: "budget_chat"
+      name: "budget-chat"
