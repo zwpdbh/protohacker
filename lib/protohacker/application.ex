@@ -11,7 +11,8 @@ defmodule Protohacker.Application do
       # Starts a worker by calling: Protohacker.Worker.start_link(arg)
       # {Protohacker.Worker, arg}
       Protohacker.EchoServer,
-      Protohacker.PrimeTime
+      Protohacker.PrimeTime,
+      Protohacker.MeansToEnd
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
