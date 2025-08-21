@@ -129,18 +129,24 @@ end
 defmodule Protohacker.BudgetChat.UserConnection do
   use GenServer
 
-  def start_link(args) do
-    socket = Keyword.fetch!(args, :socket)
-    parent = Keyword.fetch!(args, :parent)
-
-    GenServer.start_link(__MODULE__, %{socket: socket, parent: parent, name: nil})
-  end
-
   defstruct [
     :socket,
     :parent,
     :name
   ]
+
+  def start_link(args) do
+    socket = Keyword.fetch!(args, :socket)
+    parent = Keyword.fetch!(args, :parent)
+
+    state = %__MODULE__{
+      socket: socket,
+      parent: parent,
+      name: nil
+    }
+
+    GenServer.start_link(__MODULE__, state)
+  end
 
   @impl true
   def init(%__MODULE__{} = state) do
