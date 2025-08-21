@@ -20,7 +20,7 @@ defmodule Protohacker.BudgetChat do
   ]
 
   def start_link([] = _opts) do
-    GenServer.start_link(__MODULE__, :no_state)
+    GenServer.start_link(__MODULE__, :no_state, name: __MODULE__)
   end
 
   @impl true
@@ -28,7 +28,10 @@ defmodule Protohacker.BudgetChat do
     options = [
       reuseaddr: true,
       active: false,
-      packet: :line
+      packet: :line,
+      exit_on_close: false,
+      buffer: 1024 * 100,
+      mode: :binary
     ]
 
     with {:ok, listen_socket} <- :gen_tcp.listen(@port, options),
@@ -120,12 +123,14 @@ defmodule Protohacker.BudgetChat do
 end
 
 defmodule Protohacker.BudgetChat.UserConnection do
+  require Logger
   use GenServer
 
   defstruct [
     :socket,
     :parent,
-    :name
+    :name,
+    :myself
   ]
 
   def start_link(args) do
@@ -135,7 +140,8 @@ defmodule Protohacker.BudgetChat.UserConnection do
     state = %__MODULE__{
       socket: socket,
       parent: parent,
-      name: nil
+      name: nil,
+      myself: nil
     }
 
     GenServer.start_link(__MODULE__, state)
@@ -143,13 +149,7 @@ defmodule Protohacker.BudgetChat.UserConnection do
 
   @impl true
   def init(%__MODULE__{} = state) do
-    # Set process to trap exits so we can clean up
-    Process.flag(:trap_exit, true)
-    # Enable active once mode
-    :ok = :gen_tcp.controlling_process(state.socket, self()) |> dbg()
-    enable_active_once(state.socket)
-
-    {:ok, state, {:continue, :register}}
+    {:ok, %__MODULE__{state | myself: self()}, {:continue, :register}}
   end
 
   @impl true
@@ -159,28 +159,47 @@ defmodule Protohacker.BudgetChat.UserConnection do
       send_message(state.socket, "Welcome to budgetchat! What shall I call you?")
     end
 
+    Task.start_link(fn -> handle_connection_loop(state) end)
     {:noreply, state}
+  end
+
+  defp handle_connection_loop(%__MODULE__{} = state) do
+    case :gen_tcp.recv(state.socket, 0) do
+      {:ok, message} ->
+        send(state.myself, {:ok, message |> String.trim_trailing()})
+        handle_connection_loop(state)
+
+      {:error, reason} ->
+        send(state.myself, {:error, reason})
+    end
   end
 
   # When the name is nil, the first message from a client set the user's name
   @impl true
-  def handle_info({:tcp, _socket, name}, %__MODULE__{name: nil} = state) do
-    # Re-enable active once
-    enable_active_once(state.socket)
-
-    with true <- check_user_name_valid?(name),
-         {:ok, name, other_users} <- Protohacker.BudgetChat.register_user(name, self()) do
+  def handle_info({:ok, message}, %__MODULE__{name: nil} = state) do
+    with {:ok, name} <- check_user_name_valid?(message),
+         {:ok, name, other_users} <- Protohacker.BudgetChat.register_user(name, state.myself) do
       # if new user name is registered, broadcast to other users
-      Protohacker.BudgetChat.broadcast_message("* #{name} has entered the room", name, self())
+      Protohacker.BudgetChat.broadcast_message(
+        "* #{name} has entered the room",
+        name,
+        state.myself
+      )
 
       # notify current user about the other users
       existing_users_message =
         ("* The room contains: " <> Enum.join(other_users, " ,")) |> String.trim()
 
+      Logger.info("->> let user know who are in the chat exclude himself")
       send_message(state.socket, existing_users_message)
 
       {:noreply, %{state | name: name}}
     else
+      {:error, :name_is_not_allowed} ->
+        send_message(state.socket, "username is not allowed")
+        :gen_tcp.close(state.socket)
+        {:noreply, state}
+
       {:error, :duplicated_name} ->
         send_message(state.socket, "username is duplicated")
         :gen_tcp.close(state.socket)
@@ -192,28 +211,32 @@ defmodule Protohacker.BudgetChat.UserConnection do
   when receive message from user, boardcast it
   """
   @impl true
-  def handle_info({:tcp, _socket, data}, %__MODULE__{name: name} = state) do
-    # Re-enable active once
-    enable_active_once(state.socket)
-    Protohacker.BudgetChat.broadcast_message("[#{name}] #{data}", name, self())
+  def handle_info({:ok, message}, %__MODULE__{name: name} = state) do
+    Protohacker.BudgetChat.broadcast_message("[#{name}] #{message}", name, state.myself)
     {:noreply, state}
   end
 
   @impl true
-  def handle_info({:tcp_closed, _socket}, %__MODULE__{} = state) do
-    :ok = Protohacker.BudgetChat.unregister_user(state.name, self())
+  def handle_info({:error, reason}, %__MODULE__{} = state) do
+    reason |> dbg()
 
-    Protohacker.BudgetChat.broadcast_message(
-      "* #{state.name} has left the room",
-      state.name,
-      self()
-    )
+    unless state.name |> is_nil do
+      :ok = Protohacker.BudgetChat.unregister_user(state.name, state.myself)
 
-    {:stop, :normal, state}
+      Protohacker.BudgetChat.broadcast_message(
+        "* #{state.name} has left the room",
+        state.name,
+        state.myself
+      )
+    end
+
+    {:noreply, state}
   end
 
-  defp enable_active_once(socket) do
-    :inet.setopts(socket, active: :once)
+  @impl true
+  def handle_info(msg, state) do
+    Logger.warning("->> unhandled msg: #{msg}, for #{__MODULE__}, state: #{inspect(state)}")
+    {:noreploy, state}
   end
 
   defp send_message(socket, text) do
@@ -223,8 +246,10 @@ defmodule Protohacker.BudgetChat.UserConnection do
 
   # which must contain at least 1 character, and must consist entirely of alphanumeric characters (uppercase, lowercase, and digits).
   defp check_user_name_valid?(name) when is_binary(name) do
-    String.length(name) > 0 and String.match?(name, ~r/^[a-zA-Z0-9]+$/)
+    if String.length(name) >= 1 and String.match?(name, ~r/^[a-zA-Z0-9]+$/) do
+      {:ok, name}
+    else
+      {:error, :name_is_not_allowed}
+    end
   end
-
-  defp check_user_name_valid?(_), do: false
 end
