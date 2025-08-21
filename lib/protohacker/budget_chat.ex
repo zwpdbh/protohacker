@@ -57,14 +57,12 @@ defmodule Protohacker.BudgetChat do
         {:stop, reason}
 
       {:ok, socket} ->
-        Task.start_link(fn ->
-          spec = {Protohacker.BudgetChat.UserConnection, socket: socket, parent: __MODULE__}
+        spec = {Protohacker.BudgetChat.UserConnection, socket: socket, parent: __MODULE__}
 
-          DynamicSupervisor.start_child(
-            state.user_supervisor,
-            spec
-          )
-        end)
+        DynamicSupervisor.start_child(
+          state.user_supervisor,
+          spec
+        )
 
         {:noreply, state, {:continue, :accept}}
     end
