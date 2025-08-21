@@ -68,10 +68,14 @@ defmodule Protohacker.MeansToEnd do
           {:insert, timestamp, new_record} ->
             updated_records = :gb_trees.insert(timestamp, new_record, records)
             handle_connection_loop(socket, updated_records)
+
+          {:error, :bad_format} ->
+            :gen_tcp.close(socket)
         end
 
       {:error, reason} ->
         Logger.info("->> #{__MODULE__} :gen_tcp.recv error: #{inspect(reason)} ")
+        :gen_tcp.close(socket)
         {:error, reason}
     end
   end
@@ -83,6 +87,10 @@ defmodule Protohacker.MeansToEnd do
 
   defp process_packet_to_command(<<?Q, timestamp_start::signed-32, timestamp_end::signed-32>>) do
     {:query, timestamp_start, timestamp_end}
+  end
+
+  defp process_packet_to_command(_bad_format) do
+    {:error, :bad_format}
   end
 
   defp compute_mean_from_records(records, {timestamp_start, timestamp_end}) do
