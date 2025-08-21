@@ -25,7 +25,7 @@ defmodule Protohacker.PrimeTime do
 
     case :gen_tcp.listen(@port, listen_options) do
       {:ok, listen_socket} ->
-        :inet.getopts(listen_socket, [:buffer]) |> dbg()
+        # :inet.getopts(listen_socket, [:buffer]) |> dbg()
 
         Logger.info("->> start prime_time server at: #{inspect(@port)}")
         state = %__MODULE__{listen_socket: listen_socket}
