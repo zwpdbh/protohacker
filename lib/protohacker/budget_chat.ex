@@ -148,7 +148,7 @@ defmodule Protohacker.BudgetChat.UserConnection do
     # Set process to trap exits so we can clean up
     Process.flag(:trap_exit, true)
     # Enable active once mode
-    :ok = :gen_tcp.controlling_process(state.socket, self())
+    :ok = :gen_tcp.controlling_process(state.socket, self()) |> dbg()
     enable_active_once(state.socket)
 
     {:ok, state, {:continue, :register}}
