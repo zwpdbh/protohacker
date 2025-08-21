@@ -57,21 +57,16 @@ defmodule Protohacker.BudgetChat do
         {:stop, reason}
 
       {:ok, socket} ->
-        case DynamicSupervisor.start_child(
-               state.user_supervisor,
-               {Protohacker.BudgetChat.UserConnection, socket: socket, parent: __MODULE__}
-             ) do
-          {:ok, _pid} ->
-            {:noreply, state, {:continue, :accept}}
+        Task.start_link(fn ->
+          spec = {Protohacker.BudgetChat.UserConnection, socket: socket, parent: __MODULE__}
 
-          {:error, reason} ->
-            Logger.warning(
-              "->> failed to start user connection with supervisor, error: #{inspect(reason)}"
-            )
+          DynamicSupervisor.start_child(
+            state.user_supervisor,
+            spec
+          )
+        end)
 
-            :gen_tcp.close(socket)
-            {:noreply, state, {:continue, :accept}}
-        end
+        {:noreply, state, {:continue, :accept}}
     end
   end
 
@@ -182,7 +177,7 @@ defmodule Protohacker.BudgetChat.UserConnection do
 
       # notify current user about the other users
       existing_users_message =
-        "* The room contains: " <> Enum.join(other_users, " ,")
+        ("* The room contains: " <> Enum.join(other_users, " ,")) |> String.trim()
 
       send_message(state.socket, existing_users_message)
 
