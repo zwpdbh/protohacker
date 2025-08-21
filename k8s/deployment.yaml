@@ -53,3 +53,7 @@ spec:
       port: 3004
       targetPort: 3005
       name: "means-to-end"
+    - protocol: TCP
+      port: 3006
+      targetPort: 3007
+      name: "means-to-end"
