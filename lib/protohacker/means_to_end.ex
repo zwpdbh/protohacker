@@ -44,7 +44,7 @@ defmodule Protohacker.MeansToEnd do
         {:stop, reason}
 
       {:ok, socket} ->
-        Task.start_link(fn -> handle_connection_loop(socket, []) end)
+        Task.start_link(fn -> handle_connection_loop(socket, _db = :gb_trees.empty()) end)
         {:noreply, state, {:continue, :accept}}
     end
   end
@@ -66,7 +66,8 @@ defmodule Protohacker.MeansToEnd do
             end
 
           {:insert, timestamp, new_record} ->
-            handle_connection_loop(socket, records ++ [{timestamp, new_record}])
+            updated_records = :gb_trees.insert(timestamp, new_record, records)
+            handle_connection_loop(socket, updated_records)
         end
 
       {:error, reason} ->
@@ -85,31 +86,38 @@ defmodule Protohacker.MeansToEnd do
   end
 
   defp compute_mean_from_records(records, {timestamp_start, timestamp_end}) do
-    # If the interval is invalid, return 0
+    # If interval is invalid
     if timestamp_start > timestamp_end do
       0
     else
-      # Filter records where timestamp_start <= T <= timestamp_end
-      relevant =
-        for {ts, value} <- records,
-            ts >= timestamp_start and ts <= timestamp_end,
-            do: value
+      # Use iterator to traverse only the keys in [timestamp_start, timestamp_end]
+      iterator = :gb_trees.iterator_from(timestamp_start, records)
+      values = collect_values_in_range(iterator, timestamp_end)
 
-      # If no records in range, return 0
-      case relevant do
+      case values do
         [] ->
           0
 
-        values ->
-          # Compute mean: sum / count
-          sum = Enum.sum(values)
-          count = length(values)
-          # Integer division (truncates toward zero)
-          mean = div(sum, count)
-          # Note: `div/2` is integer floor division for positive, but truncates toward zero.
-          # You can use `round(sum / count)` if you want rounding instead.
-          mean
+        prices ->
+          sum = Enum.sum(prices)
+          count = length(prices)
+          # integer division
+          div(sum, count)
       end
+    end
+  end
+
+  # Helper: collect all values from iterator where key <= max_time
+  defp collect_values_in_range(iterator, max_time, acc \\ [])
+
+  defp collect_values_in_range(iterator, max_time, acc) do
+    case :gb_trees.next(iterator) do
+      {key, value, next_iterator} when key <= max_time ->
+        collect_values_in_range(next_iterator, max_time, [value | acc])
+
+      _ ->
+        # Done: either no more entries or key > max_time
+        acc
     end
   end
 end

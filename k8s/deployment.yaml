@@ -49,3 +49,7 @@ spec:
       port: 3002
       targetPort: 3003
       name: "prime-time"
+    - protocol: TCP
+      port: 3004
+      targetPort: 3005
+      name: "means-to-end"
