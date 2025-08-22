@@ -44,7 +44,11 @@ defmodule Protohacker.BudgetChat do
         user_supervisor: sup
       }
 
-      Task.start_link(fn -> accept_loop(listen_socket, sup) end)
+      Task.start_link(fn ->
+        accept_loop(state)
+        send(Protohacker.BudgetChat, {:accept_loop_stopped, self()})
+      end)
+
       {:ok, state}
     else
       {:error, reason} ->
@@ -53,17 +57,11 @@ defmodule Protohacker.BudgetChat do
     end
   end
 
-  @impl true
-  def terminate(reason, %__MODULE__{listen_socket: listen_socket}) do
-    Logger.warning("->> terminate #{__MODULE__} reason: #{{inspect(reason)}}")
-    :gen_tcp.close(listen_socket)
-  end
-
-  defp accept_loop(listen_socket, sup) do
-    case :gen_tcp.accept(listen_socket) do
+  defp accept_loop(%__MODULE__{} = state) do
+    case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
         spec = {Protohacker.BudgetChat.UserConnection, socket: socket, parent: __MODULE__}
-        DynamicSupervisor.start_child(sup, spec)
+        DynamicSupervisor.start_child(state.user_supervisor, spec)
 
       {:error, reason} ->
         Logger.error("Accept error: #{inspect(reason)}")
@@ -72,7 +70,25 @@ defmodule Protohacker.BudgetChat do
     end
 
     # Loop back — accept next connection
-    accept_loop(listen_socket, sup)
+    accept_loop(state)
+  end
+
+  @impl true
+  def handle_info({:accept_loop_stopped, _from}, state) do
+    Logger.warning("accept loop stopped")
+
+    {:stop, :accept_loop_stopped, state}
+  end
+
+  @impl true
+  def terminate(_reason, %__MODULE__{listen_socket: listen_socket} = _state) do
+    Logger.info("Shutting down BudgetChat server and closing listen socket")
+
+    if listen_socket do
+      :gen_tcp.close(listen_socket)
+    end
+
+    :ok
   end
 
   @impl true
