@@ -65,7 +65,7 @@ defmodule Protohacker.BudgetChat.UserConnection do
 
       # notify current user about the presence of other users
       existing_users_message =
-        ("* The room contains: " <> Enum.join(other_users, " ,")) |> String.trim()
+        ("* The room contains: " <> Enum.join(other_users, ", ")) |> String.trim()
 
       send_message(state.socket, existing_users_message)
 
@@ -105,8 +105,6 @@ defmodule Protohacker.BudgetChat.UserConnection do
 
   @impl true
   def handle_info({:loop_error, reason}, %__MODULE__{} = state) do
-    Logger.warning("->> loop recv error: #{inspect(reason)}")
-
     unless is_nil(state.name) do
       :ok = Protohacker.BudgetChat.unregister_user(state.name, state.myself)
 
@@ -117,7 +115,14 @@ defmodule Protohacker.BudgetChat.UserConnection do
       )
     end
 
-    {:noreply, state}
+    case reason do
+      # why add this cause problem
+      # :closed ->
+      #   {:stop, reason, state}
+      _ ->
+        Logger.debug("->> loop recv error: #{inspect(reason)}")
+        {:noreply, state}
+    end
   end
 
   @impl true
@@ -130,7 +135,7 @@ defmodule Protohacker.BudgetChat.UserConnection do
   end
 
   defp send_message(socket, text) do
-    :gen_tcp.send(socket, text <> "\n")
+    :gen_tcp.send(socket, Protohacker.BudgetChat.Common.ensure_newline(text))
   end
 
   # which must contain at least 1 character, and must consist entirely of alphanumeric characters (uppercase, lowercase, and digits).

@@ -130,14 +130,9 @@ defmodule Protohacker.BudgetChat do
   def broadcast_message(message, from_name, from_pid)
       when is_binary(from_name) and is_binary(message) and is_pid(from_pid) do
     # detect if the message is end with new line, otherwise, add it.
-    GenServer.cast(__MODULE__, {:broadcast, ensure_newline(message), from_name, from_pid})
-  end
-
-  defp ensure_newline(message) when is_binary(message) do
-    if String.ends_with?(message, "\n") do
-      message
-    else
-      message <> "\n"
-    end
+    GenServer.cast(
+      __MODULE__,
+      {:broadcast, Protohacker.BudgetChat.Common.ensure_newline(message), from_name, from_pid}
+    )
   end
 end

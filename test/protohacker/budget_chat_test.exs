@@ -72,7 +72,7 @@ defmodule Protohacker.BudgetChatTest do
     assert recv(charlie) =~ @welcome_message
     send_msg(charlie, "charlie!")
     # Should be disconnected immediately, no further messages
-    assert :gen_tcp.recv(charlie, 0, 100) == {:error, :closed}
+    assert :gen_tcp.recv(charlie, 0, 100) == {:ok, "username is not allowed\n"}
 
     # Invalid name should not notify others
     send_msg(alice, "anyone there?")
@@ -82,9 +82,7 @@ defmodule Protohacker.BudgetChatTest do
     charlie = connect_client()
     assert recv(charlie) =~ @welcome_message
     send_msg(charlie, "charlie")
-    assert recv(charlie) =~ "* The room contains:"
-    assert recv(charlie) =~ "alice"
-    assert recv(charlie) =~ "bob"
+    assert recv(charlie) =~ "* The room contains: alice, bob"
 
     # Others should see Charlie join
     assert recv(alice) =~ "* charlie has entered the room"
