@@ -44,7 +44,8 @@ defmodule Protohacker.BudgetChat do
         user_supervisor: sup
       }
 
-      {:ok, state, {:continue, :accept}}
+      Task.start_link(fn -> accept_loop(listen_socket, sup) end)
+      {:ok, state}
     else
       {:error, reason} ->
         Logger.error("#{__MODULE__} init failed: #{inspect(reason)}")
@@ -53,22 +54,25 @@ defmodule Protohacker.BudgetChat do
   end
 
   @impl true
-  def handle_continue(:accept, %__MODULE__{} = state) do
-    case :gen_tcp.accept(state.listen_socket) do
-      {:error, reason} ->
-        Logger.error("->> #{__MODULE__} failed to accept, error: #{inspect(reason)}")
-        {:stop, reason}
+  def terminate(reason, %__MODULE__{listen_socket: listen_socket}) do
+    Logger.warning("->> terminate #{__MODULE__} reason: #{{inspect(reason)}}")
+    :gen_tcp.close(listen_socket)
+  end
 
+  defp accept_loop(listen_socket, sup) do
+    case :gen_tcp.accept(listen_socket) do
       {:ok, socket} ->
         spec = {Protohacker.BudgetChat.UserConnection, socket: socket, parent: __MODULE__}
+        DynamicSupervisor.start_child(sup, spec)
 
-        DynamicSupervisor.start_child(
-          state.user_supervisor,
-          spec
-        )
-
-        {:noreply, state, {:continue, :accept}}
+      {:error, reason} ->
+        Logger.error("Accept error: #{inspect(reason)}")
+        # Don't crash; maybe terminate if it's a fatal error
+        if reason not in [:closed, :einval], do: :timer.sleep(100), else: exit(:shutdown)
     end
+
+    # Loop back — accept next connection
+    accept_loop(listen_socket, sup)
   end
 
   @impl true
@@ -177,8 +181,9 @@ defmodule Protohacker.BudgetChat.UserConnection do
   # When the name is nil, the first message from a client set the user's name
   @impl true
   def handle_info({:ok, message}, %__MODULE__{name: nil} = state) do
-    with {:ok, name} <- check_user_name_valid?(message),
-         {:ok, name, other_users} <- Protohacker.BudgetChat.register_user(name, state.myself) do
+    with {:ok, name} <- check_user_name_valid?(message) |> dbg(),
+         {:ok, name, other_users} <-
+           Protohacker.BudgetChat.register_user(name, state.myself) |> dbg() do
       # if new user name is registered, broadcast to other users
       Protohacker.BudgetChat.broadcast_message(
         "* #{name} has entered the room",
@@ -188,7 +193,7 @@ defmodule Protohacker.BudgetChat.UserConnection do
 
       # notify current user about the other users
       existing_users_message =
-        ("* The room contains: " <> Enum.join(other_users, " ,")) |> String.trim()
+        ("* The room contains: " <> Enum.join(other_users, " ,")) |> String.trim() |> dbg()
 
       Logger.info("->> let user know who are in the chat exclude himself")
       send_message(state.socket, existing_users_message)
@@ -240,8 +245,7 @@ defmodule Protohacker.BudgetChat.UserConnection do
   end
 
   defp send_message(socket, text) do
-    json = Jason.encode!(%{text: text})
-    :gen_tcp.send(socket, json <> "\n")
+    :gen_tcp.send(socket, text <> "\n")
   end
 
   # which must contain at least 1 character, and must consist entirely of alphanumeric characters (uppercase, lowercase, and digits).

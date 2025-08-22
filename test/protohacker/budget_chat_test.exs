@@ -10,7 +10,12 @@ defmodule Protohacker.BudgetChatTest do
 
   defp connect_client do
     {:ok, socket} =
-      :gen_tcp.connect(@host, @port, [:binary, packet: :line, active: false], @connect_timeout)
+      :gen_tcp.connect(
+        @host,
+        @port,
+        [mode: :binary, packet: :line, active: false],
+        @connect_timeout
+      )
 
     socket
   end
@@ -33,7 +38,7 @@ defmodule Protohacker.BudgetChatTest do
   test "case01 -- budget-chat: full interaction" do
     # Connect Alice
     alice = connect_client()
-    assert recv(alice) =~ @welcome_message
+    assert recv(alice) == @welcome_message
 
     # Set name
     send_msg(alice, "alice")
