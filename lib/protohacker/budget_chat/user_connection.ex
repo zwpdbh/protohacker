@@ -6,7 +6,8 @@ defmodule Protohacker.BudgetChat.UserConnection do
     :socket,
     :parent,
     :name,
-    :myself
+    :myself,
+    :supervisor
   ]
 
   def child_spec(opts) do
@@ -26,7 +27,8 @@ defmodule Protohacker.BudgetChat.UserConnection do
       socket: socket,
       parent: parent,
       name: nil,
-      myself: nil
+      myself: nil,
+      supervisor: nil
     }
 
     GenServer.start_link(__MODULE__, state)
@@ -34,17 +36,20 @@ defmodule Protohacker.BudgetChat.UserConnection do
 
   @impl true
   def init(%__MODULE__{} = state) do
-    {:ok, %__MODULE__{state | myself: self()}, {:continue, :register}}
+    {:ok, sup} = Task.Supervisor.start_link(max_children: 1)
+
+    {:ok, %__MODULE__{state | myself: self(), supervisor: sup}, {:continue, :register}}
   end
 
   @impl true
-  def handle_continue(:register, state) do
+  def handle_continue(:register, %__MODULE__{} = state) do
     # Send initial message
     if is_nil(state.name) do
       send_message(state.socket, "Welcome to budgetchat! What shall I call you?")
     end
 
-    Task.start_link(fn -> handle_connection_loop(state) end)
+    Task.Supervisor.start_child(state.supervisor, fn -> handle_connection_loop(state) end)
+
     {:noreply, state}
   end
 

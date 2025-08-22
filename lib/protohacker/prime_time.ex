@@ -9,11 +9,14 @@ defmodule Protohacker.PrimeTime do
   end
 
   defstruct [
-    :listen_socket
+    :listen_socket,
+    :supervisor
   ]
 
   @impl true
   def init(:no_state) do
+    {:ok, sup} = Task.Supervisor.start_link(max_children: 100)
+
     listen_options = [
       mode: :binary,
       active: false,
@@ -28,7 +31,7 @@ defmodule Protohacker.PrimeTime do
         # :inet.getopts(listen_socket, [:buffer]) |> dbg()
 
         Logger.info("->> start prime_time server at: #{inspect(@port)}")
-        state = %__MODULE__{listen_socket: listen_socket}
+        state = %__MODULE__{listen_socket: listen_socket, supervisor: sup}
 
         {:ok, state, {:continue, :accept}}
 
@@ -41,7 +44,7 @@ defmodule Protohacker.PrimeTime do
   def handle_continue(:accept, %__MODULE__{} = state) do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
-        Task.start(fn -> handle_connection_loop(socket) end)
+        Task.Supervisor.start_child(state.supervisor, fn -> handle_connection_loop(socket) end)
         {:noreply, state, {:continue, :accept}}
 
       {:error, reason} ->
