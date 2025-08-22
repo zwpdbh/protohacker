@@ -12,7 +12,8 @@ defmodule Protohacker.Application do
       # {Protohacker.Worker, arg}
       Protohacker.EchoServer,
       Protohacker.PrimeTime,
-      Protohacker.MeansToEnd
+      Protohacker.MeansToEnd,
+      Protohacker.BudgetChat
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
