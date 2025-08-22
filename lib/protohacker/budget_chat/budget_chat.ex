@@ -60,7 +60,9 @@ defmodule Protohacker.BudgetChat do
   defp accept_loop(%__MODULE__{} = state) do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
+        # REVIEW: how `child_spec` works in Protohacker.BudgetChat.UserConnection
         spec = {Protohacker.BudgetChat.UserConnection, socket: socket, parent: __MODULE__}
+
         DynamicSupervisor.start_child(state.user_supervisor, spec)
 
       {:error, reason} ->

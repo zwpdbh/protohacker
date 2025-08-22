@@ -9,6 +9,15 @@ defmodule Protohacker.BudgetChat.UserConnection do
     :myself
   ]
 
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      # ← Critical: don't restart after client disconnects
+      restart: :temporary
+    }
+  end
+
   def start_link(args) do
     socket = Keyword.fetch!(args, :socket)
     parent = Keyword.fetch!(args, :parent)
@@ -116,9 +125,9 @@ defmodule Protohacker.BudgetChat.UserConnection do
     end
 
     case reason do
-      # why add this cause problem
-      # :closed ->
-      #   {:stop, reason, state}
+      :closed ->
+        {:stop, :normal, state}
+
       _ ->
         Logger.debug("->> loop recv error: #{inspect(reason)}")
         {:noreply, state}
