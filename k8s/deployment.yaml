@@ -57,3 +57,7 @@ spec:
       port: 3006
       targetPort: 3007
       name: "budget-chat"
+    - protocol: UDP
+      port: 3008
+      targetPort: 3009
+      name: "unusual-database"

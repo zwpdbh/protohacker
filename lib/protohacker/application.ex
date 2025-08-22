@@ -13,7 +13,8 @@ defmodule Protohacker.Application do
       Protohacker.EchoServer,
       Protohacker.PrimeTime,
       Protohacker.MeansToEnd,
-      Protohacker.BudgetChat
+      Protohacker.BudgetChat,
+      Protohacker.UnusualDatabase
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

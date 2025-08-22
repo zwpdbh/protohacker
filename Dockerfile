@@ -45,7 +45,7 @@ RUN chown -R 1000:1000 /app && chmod +x bin/protohacker
 USER 1000
 
 # Expose port (if your app listens on one)
-EXPOSE 3001 3003 3005 3007
+EXPOSE 3001 3003 3005 3007 3009
 
 # Start the app
 CMD ["bin/protohacker", "start"]
