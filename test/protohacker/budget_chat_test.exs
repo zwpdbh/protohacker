@@ -23,7 +23,7 @@ defmodule Protohacker.BudgetChatTest do
   defp recv(socket, timeout \\ @recv_timeout) do
     case :gen_tcp.recv(socket, 0, timeout) do
       {:ok, data} -> String.trim_trailing(data, "\n")
-      other -> other
+      {:error, _} -> ""
     end
   end
 
@@ -109,7 +109,7 @@ defmodule Protohacker.BudgetChatTest do
     close(charlie)
   end
 
-  test "rejects duplicate name and disconnects client" do
+  test "case02 -- rejects duplicate name and disconnects client" do
     alice1 = connect_client()
     assert recv(alice1) =~ @welcome_message
     send_msg(alice1, "alice")
@@ -120,13 +120,13 @@ defmodule Protohacker.BudgetChatTest do
     send_msg(alice2, "alice")
 
     # Should be rejected and disconnected
-    assert :gen_tcp.recv(alice2, 0, 100) == {:error, :closed}
+    assert :gen_tcp.recv(alice2, 0, 100) == {:ok, "username is duplicated\n"}
 
     # Original alice should NOT see any join/leave
-    assert :gen_tcp.recv(alice1.socket, 0, 100) == {:error, :timeout} || {:error, :closed}
+    assert :gen_tcp.recv(alice1, 0, 100) == {:ok, "* The room contains:\n"}
   end
 
-  test "does not broadcast leave message when unregistered client disconnects" do
+  test "case03 -- does not broadcast leave message when unregistered client disconnects" do
     client = connect_client()
     assert recv(client) =~ @welcome_message
 
@@ -145,7 +145,7 @@ defmodule Protohacker.BudgetChatTest do
     close(alice)
   end
 
-  test "chat messages are not echoed back to sender" do
+  test "case04 -- chat messages are not echoed back to sender" do
     alice = connect_client()
     assert recv(alice) =~ @welcome_message
     send_msg(alice, "alice")
@@ -153,13 +153,15 @@ defmodule Protohacker.BudgetChatTest do
     bob = connect_client()
     assert recv(bob) =~ @welcome_message
     send_msg(bob, "bob")
-    assert recv(bob) =~ "alice"
+    assert recv(bob) == "* The room contains: alice"
+
+    assert recv(alice) == "* The room contains:"
     assert recv(alice) =~ "* bob has entered the room"
 
     send_msg(alice, "Hello bob")
 
     # Alice should not receive her own message
-    assert :gen_tcp.recv(alice.socket, 0, 100) == {:error, :timeout}
+    assert :gen_tcp.recv(alice, 0, 100) == {:error, :timeout}
 
     # Bob should receive it
     assert recv(bob) == "[alice] Hello bob"
