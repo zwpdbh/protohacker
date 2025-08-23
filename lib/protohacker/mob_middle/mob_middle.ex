@@ -3,6 +3,7 @@ defmodule Protohacker.MobMiddle do
   https://protohackers.com/problem/5
   Write a malicious proxy server for Budget Chat.
   """
+  alias ElixirLS.LanguageServer.Dialyzer.Supervisor
 
   use GenServer
 
@@ -50,7 +51,7 @@ defmodule Protohacker.MobMiddle do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
         Task.Supervisor.start_child(state.supervisor, fn ->
-          handle_connection_loop(socket)
+          handle_connection(socket)
         end)
 
         {:noreply, state, {:continue, :accept}}
@@ -61,7 +62,7 @@ defmodule Protohacker.MobMiddle do
     end
   end
 
-  defp handle_connection_loop(client_socket) do
+  defp handle_connection(client_socket) do
     # 1. every message I received from client_socket, I need to send it via budget_chat_socket
     # 2. every message I received from budget_chat_socket, I need to send it to client_socket
     # 3. inspect message, find the account and replace it with @tony_account.
