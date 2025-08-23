@@ -3,11 +3,9 @@ defmodule Protohacker.MobMiddle do
   https://protohackers.com/problem/5
   Write a malicious proxy server for Budget Chat.
   """
-  alias ElixirLS.LanguageServer.Dialyzer.Supervisor
 
   use GenServer
 
-  @tony_account "7YWHMfk9JZe0LM0g1ZauHuiSxhI"
   @budget_chat_server ~c"chat.protohackers.com"
   @budget_chat_server_port 16963
 
@@ -24,7 +22,8 @@ defmodule Protohacker.MobMiddle do
 
   @impl true
   def init(:no_state) do
-    {:ok, sup} = Task.Supervisor.start_link(max_children: 100)
+    # {:ok, sup} = Task.Supervisor.start_link(max_children: 100)
+    {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
 
     options = [
       :binary,
@@ -50,10 +49,10 @@ defmodule Protohacker.MobMiddle do
   def handle_continue(:accept, %__MODULE__{} = state) do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
-        Task.Supervisor.start_child(state.supervisor, fn ->
-          handle_connection(socket)
-        end)
-
+        # Task.Supervisor.start_child(state.supervisor, fn ->
+        #   handle_connection(socket, state.supervisor)
+        # end)
+        handle_connection(socket, state.supervisor)
         {:noreply, state, {:continue, :accept}}
 
       {:error, reason} ->
@@ -62,7 +61,7 @@ defmodule Protohacker.MobMiddle do
     end
   end
 
-  defp handle_connection(client_socket) do
+  defp handle_connection(client_socket, sup) do
     # 1. every message I received from client_socket, I need to send it via budget_chat_socket
     # 2. every message I received from budget_chat_socket, I need to send it to client_socket
     # 3. inspect message, find the account and replace it with @tony_account.
@@ -74,5 +73,11 @@ defmodule Protohacker.MobMiddle do
         mode: :binary,
         active: false
       )
+
+    spec =
+      {Protohacker.MobMiddle.Pair,
+       client_socket: client_socket, budget_chat_socket: budget_chat_socket, parent: __MODULE__}
+
+    DynamicSupervisor.start_child(sup, spec)
   end
 end
