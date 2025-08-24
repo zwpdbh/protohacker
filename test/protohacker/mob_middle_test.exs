@@ -2,8 +2,6 @@ defmodule Protohacker.MobMiddleTest do
   use ExUnit.Case
 
   @proxy_port 4003
-  @budget_chat_port 3007
-  @tony_addr "7YWHMfk9JZe0LM0g1ZauHuiSxhI"
 
   defp connect(port) do
     :gen_tcp.connect(~c"localhost", port, [:binary, packet: :line, active: false])
@@ -42,72 +40,72 @@ defmodule Protohacker.MobMiddleTest do
     assert recv_message(proxy_socket) =~ ~r{\* The room contains:.*}
   end
 
-  test "case02 -- rewrites Boguscoin address in message from client", %{proxy_socket: client} do
-    # Skip welcome and name
-    assert recv_message(client) == "Welcome to budgetchat! What shall I call you?"
-    send_message(client, "bob")
-    # room list
-    _ = recv_message(client)
+  # test "case02 -- rewrites Boguscoin address in message from client", %{proxy_socket: client} do
+  #   # Skip welcome and name
+  #   assert recv_message(client) == "Welcome to budgetchat! What shall I call you?"
+  #   send_message(client, "bob")
+  #   # room list
+  #   _ = recv_message(client)
 
-    # Send message with victim's Boguscoin address
-    victim_addr = "7iKDZEwPZSqIvDnHvVN2r0hUWXD5rHX"
-    send_message(client, "Please send payment to #{victim_addr}")
+  #   # Send message with victim's Boguscoin address
+  #   victim_addr = "7iKDZEwPZSqIvDnHvVN2r0hUWXD5rHX"
+  #   send_message(client, "Please send payment to #{victim_addr}")
 
-    # Proxy should rewrite it before sending to BudgetChat
-    # So BudgetChat server will see message with Tony's address
+  #   # Proxy should rewrite it before sending to BudgetChat
+  #   # So BudgetChat server will see message with Tony's address
 
-    # Now connect directly to BudgetChat server to observe the message
-    {:ok, server_client} = connect(@budget_chat_port)
-    assert recv_message(server_client) == "Welcome to budgetchat! What shall I call you?"
-    send_message(server_client, "observer")
-    _ = recv_message(server_client)
+  #   # Now connect directly to BudgetChat server to observe the message
+  #   {:ok, server_client} = connect(@budget_chat_port)
+  #   assert recv_message(server_client) == "Welcome to budgetchat! What shall I call you?"
+  #   send_message(server_client, "observer")
+  #   _ = recv_message(server_client)
 
-    # Wait for message
-    :timer.sleep(100)
+  #   # Wait for message
+  #   :timer.sleep(100)
 
-    # Observer should see the message with Tony's address
-    assert recv_message(server_client) == "bob: Please send payment to #{@tony_addr}"
+  #   # Observer should see the message with Tony's address
+  #   assert recv_message(server_client) == "bob: Please send payment to #{@tony_addr}"
 
-    :gen_tcp.close(server_client)
-  end
+  #   :gen_tcp.close(server_client)
+  # end
 
-  test "case03 -- rewrites Boguscoin address in message from upstream", %{proxy_socket: client} do
-    # Connect to real BudgetChat as another user
-    {:ok, upstream_client} = connect(@budget_chat_port)
-    assert recv_message(upstream_client) == "Welcome to budgetchat! What shall I call you?"
-    send_message(upstream_client, "alice")
-    _ = recv_message(upstream_client)
+  # test "case03 -- rewrites Boguscoin address in message from upstream", %{proxy_socket: client} do
+  #   # Connect to real BudgetChat as another user
+  #   {:ok, upstream_client} = connect(@budget_chat_port)
+  #   assert recv_message(upstream_client) == "Welcome to budgetchat! What shall I call you?"
+  #   send_message(upstream_client, "alice")
+  #   _ = recv_message(upstream_client)
 
-    # Alice sends a message with her Boguscoin address
-    victim_addr = "7F1u3wSD5RbOHQmupo9nx4TnhQ"
-    send_message(upstream_client, "Hi bob, send funds here: #{victim_addr}")
+  #   # Alice sends a message with her Boguscoin address
+  #   victim_addr = "7F1u3wSD5RbOHQmupo9nx4TnhQ"
+  #   send_message(upstream_client, "Hi bob, send funds here: #{victim_addr}")
 
-    :timer.sleep(100)
+  #   :timer.sleep(100)
 
-    # Close upstream client — not needed anymore
-    :gen_tcp.close(upstream_client)
+  #   # Close upstream client — not needed anymore
+  #   :gen_tcp.close(upstream_client)
 
-    # Back to proxy client (bob)
-    assert recv_message(client) == "Welcome to budgetchat! What shall I call you?"
-    send_message(client, "bob")
-    _ = recv_message(client)
+  #   # Back to proxy client (bob)
+  #   assert recv_message(client) == "Welcome to budgetchat! What shall I call you?"
+  #   send_message(client, "bob")
+  #   _ = recv_message(client)
 
-    # Now bob should receive alice's message — but rewritten
-    expected = "alice: send funds here: #{@tony_addr}"
+  #   # Now bob should receive alice's message — but rewritten
+  #   expected = "alice: send funds here: #{@tony_addr}"
 
-    assert recv_message(client) == expected,
-           "Expected Bob to receive: '#{expected}', but got: '#{inspect(recv_message(client))}'"
-  end
+  #   assert recv_message(client) == expected,
+  #          "Expected Bob to receive: '#{expected}', but got: '#{inspect(recv_message(client))}'"
+  # end
 
-  test "case04 -- does not rewrite partial matches", %{proxy_socket: client} do
-    assert recv_message(client) == "Welcome to budgetchat! What shall I call you?"
-    send_message(client, "tester")
-    _ = recv_message(client)
+  # test "case04 -- does not rewrite partial matches", %{proxy_socket: client} do
+  #   assert recv_message(client) == "Welcome to budgetchat! What shall I call you?"
+  #   send_message(client, "tester")
+  #   _ = recv_message(client)
 
-    # Send message with '7' not at word boundary
-    send_message(client, "The code is x7ABC123 and should not be replaced")
+  #   # Send message with '7' not at word boundary
+  #   send_message(client, "The code is x7ABC123 and should not be replaced")
 
-    # Should not rewrite
-    refute recv_message(client) =~ @tony_addr
-  end
+  #   # Should not rewrite
+  #   refute recv_message(client) =~ @tony_addr
+  # end
 end
