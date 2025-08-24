@@ -58,7 +58,6 @@ defmodule Protohacker.PrimeTime do
          {:ok, number} <- validate_request(command) do
       result = Math.prime?(number)
 
-      Logger.info("->> #{number} is prime: #{result}")
       json_response = Jason.encode!(%{"method" => "isPrime", "prime" => result})
 
       :gen_tcp.send(socket, json_response <> "\n")
@@ -77,8 +76,6 @@ defmodule Protohacker.PrimeTime do
         {:error, :malformed}
 
       {:error, reason} ->
-        Logger.info("->> error, reason: #{inspect(reason)}")
-
         :gen_tcp.send(socket, @malformed_response <> "\n")
         :gen_tcp.close(socket)
 
@@ -99,7 +96,7 @@ defmodule Protohacker.PrimeTime do
   end
 
   def validate_request(unknown) do
-    Logger.info("->> validate_request unknown: #{inspect(unknown)}")
+    Logger.warning("->> #{__MODULE__} validate unknown request: #{inspect(unknown)}")
     {:error, :malformed}
   end
 

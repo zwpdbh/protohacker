@@ -3,32 +3,34 @@ defmodule Protohacker.MobMiddle do
   https://protohackers.com/problem/5
   Write a malicious proxy server for Budget Chat.
   """
+  require Logger
 
   use GenServer
 
-  @budget_chat_server ~c"chat.protohackers.com"
-  @budget_chat_server_port 16963
+  @port 4003
 
-  @port 4001
-
-  def start_link([] = _opts) do
-    GenServer.start_link(__MODULE__, :no_state)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts)
   end
 
   defstruct [
     :listen_socket,
-    :supervisor
+    :supervisor,
+    :budget_chat_server,
+    :budget_chat_server_port
   ]
 
   @impl true
-  def init(:no_state) do
-    # {:ok, sup} = Task.Supervisor.start_link(max_children: 100)
+  def init(opts) do
+    budget_chat_server = Keyword.get(opts, :server)
+    budget_chat_server_port = Keyword.get(opts, :port)
+
     {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
 
     options = [
       :binary,
       packet: :line,
-      resudeaddr: true,
+      reuseaddr: true,
       active: false,
       exit_on_close: false,
       buffer: 1024 * 100
@@ -36,7 +38,18 @@ defmodule Protohacker.MobMiddle do
 
     case(:gen_tcp.listen(@port, options)) do
       {:ok, listen_socket} ->
-        state = %__MODULE__{listen_socket: listen_socket, supervisor: sup}
+        Logger.info("->> start mob_middle server is running at port: #{@port}")
+
+        Logger.info(
+          "->> budget_chat_server:port is #{budget_chat_server}:#{budget_chat_server_port}"
+        )
+
+        state = %__MODULE__{
+          listen_socket: listen_socket,
+          supervisor: sup,
+          budget_chat_server: budget_chat_server,
+          budget_chat_server_port: budget_chat_server_port
+        }
 
         {:ok, state, {:continue, :accept}}
 
@@ -52,7 +65,7 @@ defmodule Protohacker.MobMiddle do
         # Task.Supervisor.start_child(state.supervisor, fn ->
         #   handle_connection(socket, state.supervisor)
         # end)
-        handle_connection(socket, state.supervisor)
+        handle_connection(socket, state)
         {:noreply, state, {:continue, :accept}}
 
       {:error, reason} ->
@@ -61,7 +74,7 @@ defmodule Protohacker.MobMiddle do
     end
   end
 
-  defp handle_connection(client_socket, sup) do
+  defp handle_connection(client_socket, %__MODULE__{} = state) do
     # 1. every message I received from client_socket, I need to send it via budget_chat_socket
     # 2. every message I received from budget_chat_socket, I need to send it to client_socket
     # 3. inspect message, find the account and replace it with @tony_account.
@@ -69,15 +82,21 @@ defmodule Protohacker.MobMiddle do
     # 5 if connection in 1 or 2 has problem, close the both connection
 
     {:ok, budget_chat_socket} =
-      :gen_tcp.connect(@budget_chat_server, @budget_chat_server_port,
+      :gen_tcp.connect(
+        state.budget_chat_server,
+        state.budget_chat_server_port,
         mode: :binary,
-        active: false
+        packet: :line,
+        reuseaddr: true,
+        active: false,
+        exit_on_close: false,
+        buffer: 1024 * 100
       )
 
     spec =
       {Protohacker.MobMiddle.Pair,
        client_socket: client_socket, budget_chat_socket: budget_chat_socket, parent: __MODULE__}
 
-    DynamicSupervisor.start_child(sup, spec)
+    DynamicSupervisor.start_child(state.supervisor, spec)
   end
 end

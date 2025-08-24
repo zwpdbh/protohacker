@@ -7,6 +7,10 @@ defmodule Protohacker.Application do
 
   @impl true
   def start(_type, _args) do
+    # Fetch config at startup
+    server = Application.get_env(:protohacker, :budget_chat_server, ~c"chat.protohackers.com")
+    port = Application.get_env(:protohacker, :budget_chat_server_port, 16963)
+
     children = [
       # Starts a worker by calling: Protohacker.Worker.start_link(arg)
       # {Protohacker.Worker, arg}
@@ -14,7 +18,8 @@ defmodule Protohacker.Application do
       Protohacker.PrimeTime,
       Protohacker.MeansToEnd,
       Protohacker.BudgetChat,
-      Protohacker.UnusualDatabase
+      Protohacker.UnusualDatabase,
+      {Protohacker.MobMiddle, [server: server, port: port]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

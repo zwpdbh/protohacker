@@ -8,7 +8,8 @@ defmodule Protohacker.MixProject do
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      releases: releases()
+      releases: releases(),
+      config_path: "config/config.exs"
     ]
   end
 
