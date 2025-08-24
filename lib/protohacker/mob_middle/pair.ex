@@ -14,7 +14,7 @@ defmodule Protohacker.MobMiddle.Pair do
 
   def start_link(args) do
     budget_chat_socket = Keyword.fetch!(args, :budget_chat_socket)
-    client_socket = Keyword.fetch(args, :client_socket)
+    client_socket = Keyword.fetch!(args, :client_socket)
 
     GenServer.start_link(__MODULE__, {budget_chat_socket, client_socket})
   end

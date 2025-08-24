@@ -66,9 +66,6 @@ defmodule Protohacker.MobMiddle do
   def handle_continue(:accept, %__MODULE__{} = state) do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
-        # Task.Supervisor.start_child(state.supervisor, fn ->
-        #   handle_connection(socket, state.supervisor)
-        # end)
         handle_connection(socket, state)
         {:noreply, state, {:continue, :accept}}
 
@@ -78,6 +75,7 @@ defmodule Protohacker.MobMiddle do
     end
   end
 
+  # client_socket receive the message from user to proxy server.
   defp handle_connection(client_socket, %__MODULE__{} = state) do
     # 1. every message I received from client_socket, I need to send it via budget_chat_socket
     # 2. every message I received from budget_chat_socket, I need to send it to client_socket
