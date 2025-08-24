@@ -9,6 +9,10 @@ defmodule Protohacker.MobMiddle do
 
   @port 4003
 
+  def port do
+    @port
+  end
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
