@@ -74,7 +74,10 @@ defmodule Protohacker.MeansToEnd do
         end
 
       {:error, reason} ->
-        Logger.info("->> #{__MODULE__} :gen_tcp.recv error: #{inspect(reason)} ")
+        Logger.info(
+          "->> #{__MODULE__} handle_connection_loop :gen_tcp.recv error: #{inspect(reason)} "
+        )
+
         :gen_tcp.close(socket)
         {:error, reason}
     end
