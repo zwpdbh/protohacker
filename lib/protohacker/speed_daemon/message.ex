@@ -118,6 +118,16 @@ defmodule Protohacker.SpeedDaemon.Message do
     @moduledoc """
     0x21: Ticket (Server->Client)
 
+    Hexadecimal:            Decoded:
+    21                      Ticket{
+    04 55 4e 31 58              plate: "UN1X",
+    00 42                       road: 66,
+    00 64                       mile1: 100,
+    00 01 e2 40                 timestamp1: 123456,
+    00 6e                       mile2: 110,
+    00 01 e3 a8                 timestamp2: 123816,
+    27 10                       speed: 10000,
+                        }
     """
     defstruct [
       # str
@@ -168,6 +178,186 @@ defmodule Protohacker.SpeedDaemon.Message do
 
     def decode(data) do
       {:error, :unknown_format, data}
+    end
+
+    def encode(%__MODULE__{} = data) do
+      <<0x21, byte_size(data.plate)::unsigned-integer-8, data.plate::binary,
+        data.road::unsigned-integer-16, data.mile1::unsigned-integer-16,
+        data.timestamp1::unsigned-integer-32, data.mile2::unsigned-integer-16,
+        data.timestamp2::unsigned-integer-32, data.speed::unsigned-integer-16>>
+    end
+  end
+
+  defmodule WantHeartbeat do
+    @moduledoc """
+    0x40: WantHeartbeat (Client->Server)
+
+    Hexadecimal:    Decoded:
+    40              WantHeartbeat{
+    00 00 00 0a         interval: 10
+                }
+
+    """
+
+    defstruct [
+      # deciseconds which there are 10 per second
+      # For example, So an interval of "25" would mean a Heartbeat message every 2.5 seconds.
+      :interval
+    ]
+
+    def decode(<<0x40, interval::unsigned-integer-32, remaining::binary>> = data)
+        when is_binary(data) do
+      {:ok, %__MODULE__{interval: interval}, remaining}
+    end
+
+    def decode(<<0x40, _::binary>> = data) when is_binary(data) do
+      {:error, :invalid_want_heart__beat_format, data}
+    end
+
+    def decode(data) do
+      {:error, :unknown_format, data}
+    end
+
+    def encode(%__MODULE__{} = data) do
+      <<0x40, data.interval::unsigned-integer-32>>
+    end
+  end
+
+  defmodule Heartbeat do
+    @moduledoc """
+    0x41: Heartbeat (Server->Client)
+
+    Hexadecimal:    Decoded:
+    41              Heartbeat{}
+    """
+    defstruct []
+
+    def decode(<<0x41, remaining::binary>> = data) when is_binary(data) do
+      {:ok, %__MODULE__{}, remaining}
+    end
+
+    def decode(data) when is_binary(data) do
+      {:error, :unknown_format, data}
+    end
+
+    def encode(%__MODULE__{} = _data) do
+      <<0x41>>
+    end
+  end
+
+  defmodule IAmCamera do
+    @moduledoc """
+    0x80: IAmCamera (Client->Server)
+
+    Hexadecimal:    Decoded:
+    80              IAmCamera{
+    00 42               road: 66,
+    00 64               mile: 100,
+    00 3c               limit: 60,
+                }
+    """
+    defstruct [
+      :road,
+      :mile,
+      # miles per hour
+      :limit
+    ]
+
+    def decode(
+          <<0x80, road::unsigned-integer-16, mile::unsigned-16, limit::unsigned-16,
+            remaining::binary>> = data
+        )
+        when is_binary(data) do
+      {:ok, %__MODULE__{road: road, mile: mile, limit: limit}, remaining}
+    end
+
+    def decode(<<0x80, _::binary>> = data) when is_binary(data) do
+      {:error, :invalid_format, data}
+    end
+
+    def decode(data) when is_binary(data) do
+      {:error, :unknown_format, data}
+    end
+
+    def encode(%__MODULE__{} = data) do
+      <<0x80, data.road::unsigned-16, data.mile::unsigned-16, data.limit::unsigned-16>>
+    end
+  end
+
+  defmodule IAmDispatcher do
+    @moduledoc """
+    numroads: u8
+    roads: [u16] (array of u16)
+
+    The numroads field says how many roads this dispatcher is responsible for,
+    and the roads field contains the road numbers.
+
+    0x81: IAmDispatcher (Client->Server)
+
+    Hexadecimal:    Decoded:
+    81              IAmDispatcher{
+    01                  roads: [
+    00 42                   66
+                    ]
+                }
+
+    81              IAmDispatcher{
+    03                  roads: [
+    00 42                   66,
+    01 70                   368,
+    13 88                   5000
+                    ]
+                }
+    """
+    defstruct [
+      :numroads,
+      :roads
+    ]
+
+    def decode(
+          <<0x81, numroads::unsigned-8, roads::binary-size(2 * numroads), remaining::binary>> =
+            data
+        )
+        when is_binary(data) do
+      roads = parse_binary_to_array_of_road(roads, [])
+
+      {:ok, %__MODULE__{numroads: numroads, roads: roads}, remaining}
+    end
+
+    def decode(<<0x81, _::binary>> = data) when is_binary(data) do
+      {:error, :invalid_format, data}
+    end
+
+    def decode(data) do
+      {:error, :unknow_format, data}
+    end
+
+    defp parse_binary_to_array_of_road(<<road::unsigned-16, remaining::binary>> = data, acc)
+         when is_binary(data) do
+      parse_binary_to_array_of_road(remaining, acc ++ [road])
+    end
+
+    defp parse_binary_to_array_of_road(<<>> = data, acc)
+         when is_binary(data) do
+      acc
+    end
+
+    def encode(%__MODULE__{} = data) do
+      roads_binary = encode_array_of_roads_to_binary(data.roads, <<>>)
+      <<0x81, data.numroads::unsigned-8, roads_binary::binary>>
+    end
+
+    def encode(_ = data) do
+      raise "expect #{__MODULE__}, but got: #{inspect(data)}"
+    end
+
+    defp encode_array_of_roads_to_binary([first | rest] = _roads, acc) do
+      <<acc::binary, first::unsigned-16>>
+      encode_array_of_roads_to_binary(rest, <<acc::binary, first::unsigned-16>>)
+    end
+
+    defp encode_array_of_roads_to_binary([], acc) do
+      acc
     end
   end
 
