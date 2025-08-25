@@ -127,7 +127,7 @@ defmodule Protohacker.SpeedDaemon.Message.PlateTest do
     test "rescues on invalid string (non-printable, but still valid binary)" do
       # Binary is valid even if not printable — to_string should still work
       data = <<0x20, 0x02, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x01>>
-      assert {:ok, %Plate{plate: _plate, timestamp: 1}, <<>>} = Plate.decode(data)
+      assert {:error, :invalid_ascii, %{plate: <<255, 255>>}} = Plate.decode(data)
 
       # Note: `to_string(<<255,255>>)` returns a string with invalid char codes — but it's still a string
     end

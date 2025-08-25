@@ -38,15 +38,15 @@ defmodule Protohacker.SpeedDaemon.Message do
     Note: The protocol allows empty strings (length 0).
     """
     def decode(
-          <<0x10, msg_len::unsigned-integer-size(8), msg::binary-size(msg_len),
+          <<0x10, msg_len::unsigned-integer-size(8), msg_bytes::binary-size(msg_len),
             remaining::binary>>
         ) do
       # Convert binary to string (assumes ASCII, as per protocol)
-      try do
-        decoded_msg = msg |> to_string()
+      if Protohacker.SpeedDaemon.Message.valid_ascii?(msg_bytes) do
+        decoded_msg = msg_bytes |> to_string()
         {:ok, %__MODULE__{msg: decoded_msg}, remaining}
-      rescue
-        _ -> {:error, :invalid_string, <<0x10, msg_len>> <> msg <> remaining}
+      else
+        {:error, :invalid_string, %{msg: msg_bytes}}
       end
     end
 
@@ -92,12 +92,11 @@ defmodule Protohacker.SpeedDaemon.Message do
             timestamp::unsigned-integer-32, remaining::binary>> = data
         )
         when is_binary(data) do
-      try do
+      if Protohacker.SpeedDaemon.Message.valid_ascii?(plate_str_bytes) do
         plate = plate_str_bytes |> to_string()
         {:ok, %__MODULE__{plate: plate, timestamp: timestamp}, remaining}
-      rescue
-        _ ->
-          {:error, :invalid_value, %{plate: plate_str_bytes, timestamp: timestamp}}
+      else
+        {:error, :invalid_ascii, %{plate: plate_str_bytes}}
       end
     end
 
@@ -113,5 +112,66 @@ defmodule Protohacker.SpeedDaemon.Message do
       <<0x20, byte_size(plate_info.plate), plate_info.plate::binary,
         plate_info.timestamp::unsigned-integer-32>>
     end
+  end
+
+  defmodule Ticket do
+    @moduledoc """
+    0x21: Ticket (Server->Client)
+
+    """
+    defstruct [
+      # str
+      :plate,
+      # u16
+      :road,
+      # u16
+      :mile1,
+      # u32
+      :timestamp1,
+      # u16
+      :mile2,
+      # u32
+      :timestamp2,
+      # u16
+      :speed
+    ]
+
+    def decode(
+          <<0x21, plate_str_len::unsigned-integer-8, plate_str_bytes::binary-size(plate_str_len),
+            road::unsigned-integer-16, mile1::unsigned-integer-16,
+            timestamp1::unsigned-integer-32, mile2::unsigned-integer-16,
+            timestamp2::unsigned-integer-32, speed::unsigned-integer-16,
+            remaining::binary>> = data
+        )
+        when is_binary(data) do
+      if Protohacker.SpeedDaemon.Message.valid_ascii?(plate_str_bytes) do
+        plate = to_string(plate_str_bytes)
+
+        {:ok,
+         %__MODULE__{
+           plate: plate,
+           road: road,
+           mile1: mile1,
+           timestamp1: timestamp1,
+           mile2: mile2,
+           timestamp2: timestamp2,
+           speed: speed
+         }, remaining}
+      else
+        {:error, :invalid_ascii, %{plate: plate_str_bytes}}
+      end
+    end
+
+    def decode(<<0x21, _::binary>> = data) do
+      {:error, :invalid_ticket_format, data}
+    end
+
+    def decode(data) do
+      {:error, :unknown_format, data}
+    end
+  end
+
+  def valid_ascii?(binary) do
+    :binary.bin_to_list(binary) |> Enum.all?(&(&1 in 0..127))
   end
 end
