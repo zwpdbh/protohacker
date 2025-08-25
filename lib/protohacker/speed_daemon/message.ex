@@ -16,6 +16,25 @@ defmodule Protohacker.SpeedDaemon.Message do
   A string of characters in a length-prefixed format.
   """
 
+  alias Protohacker.SpeedDaemon.Message
+
+  def decode(<<type, _::binary>> = data) when is_binary(data) do
+    case type do
+      0x10 -> Message.Error.decode(data)
+      0x20 -> Message.Plate.decode(data)
+      0x21 -> Message.Ticket.decode(data)
+      0x40 -> Message.WantHeartbeat.decode(data)
+      0x41 -> Message.Heartbeat.decode(data)
+      0x80 -> Message.IAmCamera.decode(data)
+      0x81 -> Message.IAmDispatcher.decode(data)
+      _ -> {:error, :unknown_type, data}
+    end
+  end
+
+  def decode(data) when is_binary(data) do
+    {:error, :incomplete, data}
+  end
+
   defmodule Error do
     @moduledoc """
     To check if a binary contains Error message, we need to
