@@ -2,12 +2,14 @@ defmodule Protohacker.SpeedDaemon do
   @moduledoc """
 
   """
+  require Logger
 
   use GenServer
 
   defstruct [
     :listen_socket,
-    :supervisor
+    :supervisor,
+    :myself
   ]
 
   @port 4004
@@ -31,9 +33,10 @@ defmodule Protohacker.SpeedDaemon do
 
     case :gen_tcp.listen(@port, options) do
       {:ok, listen_socket} ->
-        sup = Task.Supervisor.start_link(max_children: 100)
+        sup = DynamicSupervisor.start_link(strategy: :one_for_one)
 
-        {:ok, %__MODULE__{listen_socket: listen_socket, supervisor: sup}, {:continue, :accept}}
+        {:ok, %__MODULE__{listen_socket: listen_socket, supervisor: sup, myself: self()},
+         {:continue, :accept}}
 
       {:error, reason} ->
         {:stop, reason}
@@ -43,13 +46,44 @@ defmodule Protohacker.SpeedDaemon do
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
     case :gen_tcp.accept(state.listen_socket) do
-      {:ok, _socket} ->
-        :handle_socket
+      {:ok, socket} ->
+        Task.start(fn -> handle_connection(socket, state) end)
 
         {:noreply, state, {:continue, :accept}}
 
       {:error, reason} ->
+        :gen_tcp.close(state.listen_socket)
         {:stop, reason}
+    end
+  end
+
+  defp handle_connection(socket, %__MODULE__{} = state) do
+    case :gen_tcp.recv(socket, 0) do
+      {:ok, message} ->
+        case Protohacker.SpeedDaemon.Message.decode(message) do
+          {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
+            DynamicSupervisor.start_child(
+              state.supervisor,
+              {Protohacker.SpeedDaemon.Camera, camera: camera, remaining: remaining}
+            )
+
+          {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
+            DynamicSupervisor.start_child(
+              state.supervisor,
+              {Protohacker.SpeedDaemon.TicketDispatcher,
+               dispatcher: dispatcher, remaining: remaining, socket: socket}
+            )
+
+          {:error, reason, _data} ->
+            Logger.warning("->> first message received by
+               #{__MODULE__} is unknown format: #{inspect(message)}, reason: #{inspect(reason)}")
+
+            :gen_tcp.close(socket)
+        end
+
+      {:error, reason} ->
+        Logger.warning("->> #{__MODULE__} handle_connection error: #{inspect(reason)}")
+        :gen_tcp.close(socket)
     end
   end
 end
