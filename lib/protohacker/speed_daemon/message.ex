@@ -37,28 +37,81 @@ defmodule Protohacker.SpeedDaemon.Message do
 
     Note: The protocol allows empty strings (length 0).
     """
-    def decode(<<0x10, len::unsigned-integer-8, rest::binary>>) when is_binary(rest) do
-      # String length must be 0..255 (u8), which it always is, but check data size
-      if byte_size(rest) >= len do
-        <<str_bytes::binary-size(len), remaining::binary>> = rest
-
-        # Convert binary to string (assumes valid ASCII, per protocol)
-        msg = :binary.bin_to_list(str_bytes) |> List.to_string()
-
-        {:ok, %__MODULE__{msg: msg}, remaining}
-      else
-        # Not enough data to read `len` bytes — incomplete message
-        {:error, "not enough data to read", <<0x10, len>> <> rest}
+    def decode(
+          <<0x10, msg_len::unsigned-integer-size(8), msg::binary-size(msg_len),
+            remaining::binary>>
+        ) do
+      # Convert binary to string (assumes ASCII, as per protocol)
+      try do
+        decoded_msg = msg |> to_string()
+        {:ok, %__MODULE__{msg: decoded_msg}, remaining}
+      rescue
+        _ -> {:error, :invalid_string, <<0x10, msg_len>> <> msg <> remaining}
       end
     end
 
-    # Catch-all: doesn't start with 0x10 or invalid binary
+    # Handle incomplete or malformed data
+    def decode(<<0x10, msg_len, rest::binary>>) do
+      # If we don't have enough data for the string
+      if byte_size(rest) < msg_len do
+        {:error, :incomplete, <<0x10, msg_len>> <> rest}
+      else
+        # This case should not happen — means pattern didn't match
+        {:error, :malformed, <<0x10, msg_len>> <> rest}
+      end
+    end
+
+    def decode(<<0x10>>) do
+      {:error, :incomplete, <<0x10>>}
+    end
+
+    # Wrong message type
     def decode(data) when is_binary(data) do
-      {:error, "invalid format", data}
+      {:error, :invalid_type, data}
     end
 
     def encode(msg) when is_binary(msg) do
       <<0x10, byte_size(msg)::unsigned-integer-8, msg::binary>>
+    end
+  end
+
+  defmodule Plate do
+    @moduledoc """
+    1. First byte is 0x20,
+    2. Followed by plate:str,
+    3. Then timestamp:u32
+    """
+
+    defstruct [
+      :plate,
+      :timestamp
+    ]
+
+    def decode(
+          <<0x20, plate_len::unsigned-integer-8, plate_str_bytes::binary-size(plate_len),
+            timestamp::unsigned-integer-32, remaining::binary>> = data
+        )
+        when is_binary(data) do
+      try do
+        plate = plate_str_bytes |> to_string()
+        {:ok, %__MODULE__{plate: plate, timestamp: timestamp}, remaining}
+      rescue
+        _ ->
+          {:error, :invalid_value, %{plate: plate_str_bytes, timestamp: timestamp}}
+      end
+    end
+
+    def decode(<<0x20, _::binary>> = data) do
+      {:error, :invalid_plate_format, data}
+    end
+
+    def decode(data) do
+      {:error, :unknown_format, data}
+    end
+
+    def encode(%__MODULE__{} = plate_info) do
+      <<0x20, byte_size(plate_info.plate), plate_info.plate::binary,
+        plate_info.timestamp::unsigned-integer-32>>
     end
   end
 end

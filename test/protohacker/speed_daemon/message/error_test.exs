@@ -1,33 +1,28 @@
 defmodule Protohacker.SpeedDaemon.Message.ErrorTest do
   use ExUnit.Case
-
   alias Protohacker.SpeedDaemon.Message.Error
 
   describe "decode/1" do
     test "parses Error{msg: 'bad'} from example" do
       # Hex: 10 03 62 61 64
       data = <<0x10, 0x03, 0x62, 0x61, 0x64>>
-
       assert {:ok, %Error{msg: "bad"}, <<>>} = Error.decode(data)
     end
 
     test "parses Error{msg: 'illegal msg'} from example" do
       # Hex: 10 0b 69 6c 6c 65 67 61 6c 20 6d 73 67
       data = <<0x10, 0x0B, 0x69, 0x6C, 0x6C, 0x65, 0x67, 0x61, 0x6C, 0x20, 0x6D, 0x73, 0x67>>
-
       assert {:ok, %Error{msg: "illegal msg"}, <<>>} = Error.decode(data)
     end
 
     test "parses empty string message" do
       # Error{""}: 10 00
       data = <<0x10, 0x00>>
-
       assert {:ok, %Error{msg: ""}, <<>>} = Error.decode(data)
     end
 
     test "handles concatenated messages" do
       # Two messages: Error{"hi"}, Error{"ok"}
-      # "hi" = 68 69, "ok" = 6F 6B
       data = <<0x10, 0x02, 0x68, 0x69, 0x10, 0x02, 0x6F, 0x6B>>
 
       assert {:ok, %Error{msg: "hi"}, rest} = Error.decode(data)
@@ -38,23 +33,30 @@ defmodule Protohacker.SpeedDaemon.Message.ErrorTest do
       # Length says 5, but only 2 bytes provided
       data = <<0x10, 0x05, 0x68, 0x69>>
 
-      assert {:error, "not enough data to read", ^data} = Error.decode(data)
+      # This fails in the second clause: not enough data for `binary-size(5)`
+      assert {:error, :incomplete, ^data} = Error.decode(data)
     end
 
-    test "returns error for incomplete header" do
-      # Only type byte, no length
+    test "returns error for incomplete header (missing length)" do
+      # Only type byte
       data = <<0x10>>
-      assert {:error, "invalid format", ^data} = Error.decode(data)
+      assert {:error, :incomplete, ^data} = Error.decode(data)
+    end
+
+    test "returns error for incomplete header (has length but no string)" do
+      # Has length 3, but no string bytes
+      data = <<0x10, 0x03>>
+      assert {:error, :incomplete, ^data} = Error.decode(data)
     end
 
     test "returns error for wrong message type" do
       # Starts with 0x20 (Plate), not 0x10
       data = <<0x20, 0x03, 0x66, 0x6F, 0x6F>>
-      assert {:error, "invalid format", ^data} = Error.decode(data)
+      assert {:error, :invalid_type, ^data} = Error.decode(data)
     end
 
     test "returns error for empty binary" do
-      assert {:error, "invalid format", <<>>} = Error.decode(<<>>)
+      assert {:error, :invalid_type, <<>>} = Error.decode(<<>>)
     end
   end
 
