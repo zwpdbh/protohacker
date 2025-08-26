@@ -64,7 +64,8 @@ defmodule Protohacker.SpeedDaemon do
           {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
             DynamicSupervisor.start_child(
               state.supervisor,
-              {Protohacker.SpeedDaemon.Camera, camera: camera, remaining: remaining}
+              {Protohacker.SpeedDaemon.Camera,
+               camera: camera, remaining: remaining, socket: socket}
             )
 
           {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
@@ -85,5 +86,24 @@ defmodule Protohacker.SpeedDaemon do
         Logger.warning("->> #{__MODULE__} handle_connection error: #{inspect(reason)}")
         :gen_tcp.close(socket)
     end
+  end
+
+  def send_heartbeat_message_loop(interval, socket) do
+    message =
+      %Protohacker.SpeedDaemon.Message.Heartbeat{}
+      |> Protohacker.SpeedDaemon.Message.Heartbeat.encode()
+
+    :gen_tcp.send(socket, message)
+    Process.sleep(interval * 100)
+
+    send_heartbeat_message_loop(interval, socket)
+  end
+
+  def send_error_message(socket) do
+    message =
+      "illegal msg"
+      |> Protohacker.SpeedDaemon.Message.Error.encode()
+
+    :gen_tcp.send(socket, message)
   end
 end

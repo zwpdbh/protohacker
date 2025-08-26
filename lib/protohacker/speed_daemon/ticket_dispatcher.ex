@@ -1,6 +1,7 @@
 defmodule Protohacker.SpeedDaemon.TicketDispatcher do
   use GenServer
 
+  require Logger
   alias Protohacker.SpeedDaemon.Message.IAmDispatcher
 
   def child_spec(opts) do
@@ -40,7 +41,38 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
-    :todo
-    {:noreply, state, {:continue, :accept}}
+    with {:ok, packet} <- :gen_tcp.recv(state.socket, 0),
+         {:ok, message, remaining} <-
+           Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
+      handle_message(message, state)
+
+      updated_state = %__MODULE__{state | remaining: remaining}
+      {:noreply, updated_state, {:continue, :accept}}
+    else
+      {:error, reason, data} ->
+        Logger.debug("#{__MODULE__} decode unknow format data: #{inspect(data)}")
+        Protohacker.SpeedDaemon.send_error_message(state.socket)
+        {:stop, reason}
+
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  defp handle_message(message, %__MODULE__{} = state) do
+    Logger.debug("->> received message: #{message}")
+
+    case message do
+      %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval} ->
+        Task.async(fn ->
+          Protohacker.SpeedDaemon.send_heartbeat_message_loop(interval, state.socket)
+        end)
+    end
+  end
+
+  @impl true
+  def terminate(_reason, %__MODULE__{} = state) do
+    :gen_tcp.close(state.socket)
+    :ok
   end
 end

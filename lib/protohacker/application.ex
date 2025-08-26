@@ -19,7 +19,8 @@ defmodule Protohacker.Application do
       Protohacker.MeansToEnd,
       Protohacker.BudgetChat,
       Protohacker.UnusualDatabase,
-      {Protohacker.MobMiddle, [server: server, port: port]}
+      {Protohacker.MobMiddle, [server: server, port: port]},
+      Protohacker.SpeedDaemon
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
