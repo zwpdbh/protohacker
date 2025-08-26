@@ -33,7 +33,9 @@ defmodule Protohacker.SpeedDaemon do
 
     case :gen_tcp.listen(@port, options) do
       {:ok, listen_socket} ->
-        sup = DynamicSupervisor.start_link(strategy: :one_for_one)
+        {:ok, _pid} = Registry.start_link(keys: :unique, name: TicketGeneratorRegistry)
+        {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
+        {:ok, _pid} = DynamicSupervisor.start_child(sup, {Phoenix.PubSub, name: :speed_daemon})
 
         {:ok, %__MODULE__{listen_socket: listen_socket, supervisor: sup, myself: self()},
          {:continue, :accept}}
@@ -69,11 +71,30 @@ defmodule Protohacker.SpeedDaemon do
             )
 
           {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-            DynamicSupervisor.start_child(
-              state.supervisor,
-              {Protohacker.SpeedDaemon.TicketDispatcher,
-               dispatcher: dispatcher, remaining: remaining, socket: socket}
-            )
+            {:ok, _pid} =
+              DynamicSupervisor.start_child(
+                state.supervisor,
+                {Protohacker.SpeedDaemon.TicketDispatcher,
+                 dispatcher: dispatcher, remaining: remaining, socket: socket}
+              )
+
+            for each_road <- dispatcher.roads do
+              case DynamicSupervisor.start_child(
+                     state.supervisor,
+                     {Protohacker.SpeedDaemon.TicketGenerator, road: each_road}
+                   ) do
+                {:ok, _pid} ->
+                  :ok
+
+                {:error, {:already_started, _pid}} ->
+                  :ok
+
+                other ->
+                  Logger.warning(
+                    "->> could not start ticket generator for road: #{each_road}, reason: #{other}"
+                  )
+              end
+            end
 
           {:error, reason, _data} ->
             Logger.warning("->> first message received by

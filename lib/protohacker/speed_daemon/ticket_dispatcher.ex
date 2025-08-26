@@ -41,11 +41,14 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
+    for each_road <- state.roads do
+      :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_dispatcher_road_#{each_road}")
+    end
+
     with {:ok, packet} <- :gen_tcp.recv(state.socket, 0),
          {:ok, message, remaining} <-
-           Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
-      handle_message(message, state)
-
+           Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet),
+         :ok <- handle_message(message, state) do
       updated_state = %__MODULE__{state | remaining: remaining}
       {:noreply, updated_state, {:continue, :accept}}
     else
@@ -67,6 +70,11 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
         Task.async(fn ->
           Protohacker.SpeedDaemon.send_heartbeat_message_loop(interval, state.socket)
         end)
+
+        :ok
+
+      other_message ->
+        {:error, "->> ticket dispatcher, it received: #{other_message}"}
     end
   end
 

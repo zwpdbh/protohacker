@@ -6,6 +6,9 @@ defmodule Protohacker.SpeedDaemon.Camera do
 
   use GenServer
 
+  alias Protohacker.SpeedDaemon.Camera
+  alias Phoenix.PubSub
+
   defstruct [
     :socket,
     :remaining,
@@ -47,11 +50,9 @@ defmodule Protohacker.SpeedDaemon.Camera do
   def handle_continue(:accept, %__MODULE__{} = state) do
     with {:ok, packet} <- :gen_tcp.recv(state.socket, 0),
          {:ok, message, remaining} <-
-           Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
-      Logger.debug("->> receive message: #{inspect(message)}")
-
+           Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet),
+         :ok <- handle_message(message, state) do
       updated_state = %__MODULE__{state | remaining: remaining}
-
       {:noreply, updated_state, {:continue, :accept}}
     else
       {:error, reason} ->
@@ -65,6 +66,32 @@ defmodule Protohacker.SpeedDaemon.Camera do
         Protohacker.SpeedDaemon.send_error_message(state.socket)
 
         {:stop, reason}
+    end
+  end
+
+  defp handle_message(message, %__MODULE__{} = state) do
+    Logger.debug("->> received message: #{message}")
+
+    case message do
+      %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval} ->
+        Task.async(fn ->
+          Protohacker.SpeedDaemon.send_heartbeat_message_loop(interval, state.socket)
+        end)
+
+        :ok
+
+      %Protohacker.SpeedDaemon.Message.Plate{plate: plate, timestamp: timestamp} ->
+        Phoenix.PubSub.broadcast(:speed_daemon, "camera_road_#{state.road}", %{
+          plate: plate,
+          timestamp: timestamp,
+          limit: state.limit,
+          mile: state.mile
+        })
+
+        :ok
+
+      other_message ->
+        {:error, "->> as Camera, it received other message: #{other_message}"}
     end
   end
 
