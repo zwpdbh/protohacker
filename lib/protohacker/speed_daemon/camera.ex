@@ -6,9 +6,6 @@ defmodule Protohacker.SpeedDaemon.Camera do
 
   use GenServer
 
-  alias Protohacker.SpeedDaemon.Camera
-  alias Phoenix.PubSub
-
   defstruct [
     :socket,
     :remaining,

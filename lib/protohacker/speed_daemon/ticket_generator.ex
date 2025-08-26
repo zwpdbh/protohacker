@@ -3,8 +3,7 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   alias Phoenix.PubSub
 
   defstruct [
-    :road,
-    :speed_limit
+    :road
   ]
 
   def child_spec(opts) do
@@ -23,13 +22,14 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
     GenServer.start_link(__MODULE__, road, name: via_tuple(road))
   end
 
+  # REVIEW: how registry make sure the unique of TicketGenerator given road
   defp via_tuple(road), do: {:via, Registry, {TicketGeneratorRegistry, road}}
 
   @impl true
   def init(road) when is_number(road) do
     PubSub.subscribe(:speed_daemon, "camera_road_#{road}")
-
-    {:ok, %__MODULE__{road: road, speed_limit: nil}}
+    state = %__MODULE__{road: road}
+    {:ok, state}
   end
 
   @doc """
@@ -40,6 +40,12 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile},
         %__MODULE__{} = state
       ) do
+    # PubSub.broadcast(
+    #   :speed_daemon,
+    #   "ticket_dispatcher_road_#{state.road}",
+    #   ticket
+    # )
+
     {:noreply, state}
   end
 end
