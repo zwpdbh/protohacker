@@ -3,7 +3,11 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   alias Phoenix.PubSub
 
   defstruct [
-    :road
+    :road,
+    # %{ {plate, day} => {mile, timestamp} }
+    plate_first: %{},
+    # List of unsent tickets (if no dispatcher)
+    pending_tickets: []
   ]
 
   def child_spec(opts) do
@@ -12,14 +16,16 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
 
     %{
       id: child_id,
-      start: {__MODULE__, :start_link, [opts]}
+      start: {__MODULE__, :start_link, [opts]},
+      # REVIEW: what type it could support and why :worker ?
+      type: :worker
     }
   end
 
   def start_link(opts) do
     road = Keyword.fetch!(opts, :road)
-
-    GenServer.start_link(__MODULE__, road, name: via_tuple(road))
+    name = via_tuple(road)
+    GenServer.start_link(__MODULE__, road, name: name)
   end
 
   # REVIEW: how registry make sure the unique of TicketGenerator given road
@@ -27,9 +33,10 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
 
   @impl true
   def init(road) when is_number(road) do
+    # subscribe to camera events
     PubSub.subscribe(:speed_daemon, "camera_road_#{road}")
-    state = %__MODULE__{road: road}
-    {:ok, state}
+
+    {:ok, %__MODULE__{road: road}}
   end
 
   @doc """
@@ -40,12 +47,18 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile},
         %__MODULE__{} = state
       ) do
-    # PubSub.broadcast(
-    #   :speed_daemon,
-    #   "ticket_dispatcher_road_#{state.road}",
-    #   ticket
-    # )
+    day = div(timestamp, 86_400)
+    key = {plate, day}
 
-    {:noreply, state}
+    case Map.get(state.plate_first, key) do
+      nil ->
+        # first see that plate, record it
+        new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
+        {:noreply, %__MODULE__{state | plate_first: new_plate_first}}
+
+      {prev_mile, prev_timestamp} ->
+        nil
+        {:noreply, state}
+    end
   end
 end
