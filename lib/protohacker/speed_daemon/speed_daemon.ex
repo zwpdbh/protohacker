@@ -86,25 +86,21 @@ defmodule Protohacker.SpeedDaemon do
           <<0x80>> ->
             switch_off_peek(socket)
 
-            {:ok, pid} =
+            {:ok, _pid} =
               DynamicSupervisor.start_child(
                 state.supervisor,
                 {Protohacker.SpeedDaemon.Camera, socket: socket}
               )
 
-            :ok = :gen_tcp.controlling_process(socket, pid)
-
           <<0x81>> ->
             switch_off_peek(socket)
 
-            {:ok, pid} =
+            {:ok, _pid} =
               DynamicSupervisor.start_child(
                 state.supervisor,
                 {Protohacker.SpeedDaemon.TicketDispatcher,
                  socket: socket, supervisor: state.supervisor}
               )
-
-            :ok = :gen_tcp.controlling_process(socket, pid)
         end
 
       {:error, reason} ->

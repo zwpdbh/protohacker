@@ -98,12 +98,14 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
 
   @impl true
   def terminate(_reason, %__MODULE__{} = state) do
-    for each_road <- state.roads do
-      Phoenix.PubSub.broadcast!(
-        :speed_daemon,
-        "ticket_dispatcher_road_#{each_road}",
-        :dispatcher_offline
-      )
+    if not is_nil(state.roads) do
+      for each_road <- state.roads do
+        Phoenix.PubSub.broadcast!(
+          :speed_daemon,
+          "ticket_dispatcher_road_#{each_road}",
+          :dispatcher_offline
+        )
+      end
     end
 
     :gen_tcp.close(state.socket)
