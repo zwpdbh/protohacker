@@ -42,7 +42,7 @@ defmodule Protohacker.MobMiddle do
 
     case(:gen_tcp.listen(@port, options)) do
       {:ok, listen_socket} ->
-        Logger.info("->> start mob_middle server is running at port: #{@port}")
+        Logger.info("->> start mob_middle server at port: #{@port}")
 
         Logger.info(
           "->> budget_chat_server:port is #{budget_chat_server}:#{budget_chat_server_port}"

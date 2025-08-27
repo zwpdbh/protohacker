@@ -37,8 +37,9 @@ defmodule Protohacker.SpeedDaemon do
         {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
         {:ok, _pid} = DynamicSupervisor.start_child(sup, {Phoenix.PubSub, name: :speed_daemon})
 
-        {:ok, %__MODULE__{listen_socket: listen_socket, supervisor: sup, myself: self()},
-         {:continue, :accept}}
+        Logger.info("->> start speed_daemon server at port: #{@port}")
+        state = %__MODULE__{listen_socket: listen_socket, supervisor: sup, myself: self()}
+        {:ok, state, {:continue, :accept}}
 
       {:error, reason} ->
         {:stop, reason}
@@ -50,7 +51,6 @@ defmodule Protohacker.SpeedDaemon do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
         Task.start(fn -> handle_connection(socket, state) end)
-
         {:noreply, state, {:continue, :accept}}
 
       {:error, reason} ->
@@ -87,14 +87,16 @@ defmodule Protohacker.SpeedDaemon do
                     "->> could not start ticket generator for road: #{each_road}, reason: #{other}"
                   )
               end
-
-              {:ok, _pid} =
-                DynamicSupervisor.start_child(
-                  state.supervisor,
-                  {Protohacker.SpeedDaemon.TicketDispatcher,
-                   dispatcher: dispatcher, remaining: remaining, socket: socket}
-                )
             end
+
+            state |> dbg()
+
+            {:ok, _pid} =
+              DynamicSupervisor.start_child(
+                state.supervisor,
+                {Protohacker.SpeedDaemon.TicketDispatcher,
+                 dispatcher: dispatcher, remaining: remaining, socket: socket}
+              )
 
           {:error, reason, _data} ->
             Logger.warning("->> first message received by
