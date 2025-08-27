@@ -1,29 +1,23 @@
 defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
   use ExUnit.Case
 
-  @server ~c"localhost"
+  @host ~c"localhost"
   @port 4004
-
-  setup do
-    # Wait a bit for server to bind
-    :timer.sleep(200)
-    :ok
-  end
 
   test "generates ticket for speeding car and sends to dispatcher" do
     # Connect camera 1
-    {:ok, cam1_socket} = :gen_tcp.connect(@server, @port, [:binary, active: false])
+    {:ok, cam1_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
 
     send_ia_camera(cam1_socket, 123, 8, 60)
     send_plate(cam1_socket, "UN1X", 0)
 
     # Connect camera 2
-    {:ok, cam2_socket} = :gen_tcp.connect(@server, @port, [:binary, active: false])
+    {:ok, cam2_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
     send_ia_camera(cam2_socket, 123, 9, 60)
     send_plate(cam2_socket, "UN1X", 45)
 
     # Connect dispatcher
-    {:ok, disp_socket} = :gen_tcp.connect(@server, @port, [:binary, active: false])
+    {:ok, disp_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
     send_ia_dispatcher(disp_socket, [123])
 
     # Read the ticket from dispatcher

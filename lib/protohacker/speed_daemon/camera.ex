@@ -22,73 +22,73 @@ defmodule Protohacker.SpeedDaemon.Camera do
     }
   end
 
-  def start_link([opts]) do
-    %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera = Keyword.fetch!(opts, :camera)
+  def start_link(opts) do
     socket = Keyword.fetch!(opts, :socket)
-    remaining = Keyword.fetch!(opts, :remaining)
-
-    GenServer.start_link(__MODULE__, {camera, remaining, socket})
+    GenServer.start_link(__MODULE__, socket)
   end
 
   @impl true
-  def init({%Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining, socket}) do
+  def init(socket) do
     state = %__MODULE__{
-      socket: socket,
-      remaining: remaining,
-      road: camera.road,
-      mile: camera.mile,
-      limit: camera.limit
+      socket: socket
     }
 
-    {:ok, state, {:continue, :accept}}
+    :gen_tcp.controlling_process(socket, self())
+    {:ok, %{state | remaining: <<>>}, {:continue, :accept}}
   end
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
-    with {:ok, packet} <- :gen_tcp.recv(state.socket, 0),
-         {:ok, message, remaining} <-
-           Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet),
-         :ok <- handle_message(message, state) do
-      updated_state = %__MODULE__{state | remaining: remaining}
-      {:noreply, updated_state, {:continue, :accept}}
-    else
+    case :gen_tcp.recv(state.socket, 0) do
       {:error, reason} ->
         {:stop, reason}
 
-      {:error, reason, data} ->
-        Logger.debug(
-          "->> decode message failed from #{__MODULE__}, reason: #{inspect(reason)}, data: #{inspect(data)}"
-        )
+      {:ok, packet} ->
+        case Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
+          {:ok, message, remaining} ->
+            case message do
+              %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera ->
+                updated_state = %{
+                  state
+                  | remaining: remaining,
+                    road: camera.road,
+                    mile: camera.mile,
+                    limit: camera.limit
+                }
 
-        Protohacker.SpeedDaemon.send_error_message(state.socket)
+                {:noreply, updated_state, {:continue, :accept}}
 
-        {:stop, reason}
-    end
-  end
+              %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
+                start_heartbeat(state.socket, hb.interval)
 
-  defp handle_message(message, %__MODULE__{} = state) do
-    Logger.debug("->> received message: #{message}")
+                {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
 
-    case message do
-      %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval} ->
-        Task.async(fn ->
-          Protohacker.SpeedDaemon.send_heartbeat_message_loop(interval, state.socket)
-        end)
+              %Protohacker.SpeedDaemon.Message.Plate{} = plate ->
+                Phoenix.PubSub.broadcast!(
+                  :speed_daemon,
+                  "camera_road_#{state.road}",
+                  %{
+                    plate: plate.plate,
+                    timestamp: plate.timestamp,
+                    road: state.road,
+                    mile: state.mile,
+                    limit: state.limit
+                  }
+                )
 
-        :ok
+                {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
 
-      %Protohacker.SpeedDaemon.Message.Plate{plate: plate, timestamp: timestamp} ->
-        Phoenix.PubSub.broadcast(:speed_daemon, "camera_road_#{state.road}", %{
-          plate: plate,
-          timestamp: timestamp,
-          limit: state.limit,
-          mile: state.mile
-        })
+              other_message ->
+                Logger.warning(
+                  "->> Camera socket receive other message: #{inspect(other_message)}"
+                )
 
-        :ok
+                {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
+            end
 
-      other_message ->
-        {:error, "->> as Camera, it received other message: #{other_message}"}
+          error ->
+            {:stop, error}
+        end
     end
   end
 
@@ -96,5 +96,21 @@ defmodule Protohacker.SpeedDaemon.Camera do
   def terminate(_reason, %__MODULE__{} = state) do
     :gen_tcp.close(state.socket)
     :ok
+  end
+
+  def start_heartbeat(socket, interval) do
+    :timer.send_interval(interval * 100, self(), {:send_heartbeat, socket})
+  end
+
+  @impl true
+  def handle_info({:send_heartbeat, socket}, state) do
+    :gen_tcp.send(
+      socket,
+      Protohacker.SpeedDaemon.Message.Heartbeat.encode(
+        %Protohacker.SpeedDaemon.Message.Heartbeat{}
+      )
+    )
+
+    {:noreply, state}
   end
 end

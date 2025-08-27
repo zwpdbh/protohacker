@@ -2,7 +2,6 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
   use GenServer
 
   require Logger
-  alias Protohacker.SpeedDaemon.Message.IAmDispatcher
 
   def child_spec(opts) do
     %{
@@ -16,70 +15,85 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
     :roads,
     :myself,
     :remaining,
-    :socket
+    :socket,
+    :supervisor
   ]
 
   def start_link(opts) do
-    %IAmDispatcher{} = dispatcher = Keyword.fetch!(opts, :dispatcher)
-    remaining = Keyword.fetch!(opts, :remaining)
     socket = Keyword.fetch!(opts, :socket)
-
-    GenServer.start_link(__MODULE__, {dispatcher, remaining, socket})
+    sup = Keyword.fetch!(opts, :supervisor)
+    GenServer.start_link(__MODULE__, {socket, sup})
   end
 
   @impl true
-  def init({%IAmDispatcher{} = dispatcher, remaining, socket}) do
+  def init({socket, sup}) do
     state = %__MODULE__{
-      roads: dispatcher.roads,
-      myself: self(),
-      remaining: remaining,
-      socket: socket
+      socket: socket,
+      remaining: <<>>,
+      supervisor: sup
     }
 
-    for each_road <- dispatcher.roads do
-      Phoenix.PubSub.broadcast!(
-        :speed_deamon,
-        "ticket_dispatcher_road_#{each_road}",
-        {:dispatcher_online, socket}
-      )
-    end
-
+    :gen_tcp.controlling_process(socket, self())
     {:ok, state, {:continue, :accept}}
   end
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
-    with {:ok, packet} <- :gen_tcp.recv(state.socket, 0),
-         {:ok, message, remaining} <-
-           Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet),
-         :ok <- handle_message(message, state) do
-      updated_state = %__MODULE__{state | remaining: remaining}
-      {:noreply, updated_state, {:continue, :accept}}
-    else
-      {:error, reason, data} ->
-        Logger.debug("#{__MODULE__} decode unknow format data: #{inspect(data)}")
-        Protohacker.SpeedDaemon.send_error_message(state.socket)
-        {:stop, reason}
-
+    case :gen_tcp.recv(state.socket, 0) do
       {:error, reason} ->
         {:stop, reason}
+
+      {:ok, packet} ->
+        case Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
+          {:ok, message, remaining} ->
+            case message do
+              %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher ->
+                for each_road <- dispatcher.roads do
+                  DynamicSupervisor.start_child(
+                    state.supervisor,
+                    {Protohacker.SpeedDaemon.TicketGenerator,
+                     road: each_road, dispatcher_socket: state.socket}
+                  )
+                end
+
+                updated_state =
+                  %{state | remaining: remaining, roads: dispatcher.roads}
+
+                {:noreply, updated_state, {:continue, :accept}}
+
+              %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
+                start_heartbeat(state.socket, hb.interval)
+
+                {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
+
+              other_message ->
+                Logger.warning(
+                  "->> TicketDispatcher receive other message: #{inspect(other_message)}"
+                )
+
+                {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
+            end
+
+          error ->
+            {:stop, error}
+        end
     end
   end
 
-  defp handle_message(message, %__MODULE__{} = state) do
-    Logger.debug("->> received message: #{message}")
+  def start_heartbeat(socket, interval) do
+    :timer.send_interval(interval * 100, self(), {:send_heartbeat, socket})
+  end
 
-    case message do
-      %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval} ->
-        Task.async(fn ->
-          Protohacker.SpeedDaemon.send_heartbeat_message_loop(interval, state.socket)
-        end)
+  @impl true
+  def handle_info({:send_heartbeat, socket}, state) do
+    :gen_tcp.send(
+      socket,
+      Protohacker.SpeedDaemon.Message.Heartbeat.encode(
+        %Protohacker.SpeedDaemon.Message.Heartbeat{}
+      )
+    )
 
-        :ok
-
-      other_message ->
-        {:error, "->> ticket dispatcher, it received other message: #{other_message}"}
-    end
+    {:noreply, state}
   end
 
   @impl true

@@ -27,20 +27,22 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
 
   def start_link(opts) do
     road = Keyword.fetch!(opts, :road)
+    dispatcher_socket = Keyword.fetch!(opts, :dispatcher_socket)
+
     name = via_tuple(road)
-    GenServer.start_link(__MODULE__, road, name: name)
+    GenServer.start_link(__MODULE__, {road, dispatcher_socket}, name: name)
   end
 
   # REVIEW: how registry make sure the unique of TicketGenerator given road
   defp via_tuple(road), do: {:via, Registry, {TicketGeneratorRegistry, road}}
 
   @impl true
-  def init(road) when is_number(road) do
+  def init({road, dispatcher_socket}) when is_number(road) do
     # subscribe to camera events
     PubSub.subscribe(:speed_daemon, "camera_road_#{road}")
     PubSub.subscribe(:speed_daemon, "ticket_dispatcher_road_#{road}")
 
-    {:ok, %__MODULE__{road: road}}
+    {:ok, %__MODULE__{road: road, dispatcher_socket: dispatcher_socket}}
   end
 
   @doc """
@@ -48,9 +50,10 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   """
   @impl true
   def handle_info(
-        %{plate: plate, timestamp: timestamp, limit: limit, mile: mile},
+        %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road},
         %__MODULE__{} = state
-      ) do
+      )
+      when road == state.road do
     day = div(timestamp, 86_400)
     key = {plate, day}
 
