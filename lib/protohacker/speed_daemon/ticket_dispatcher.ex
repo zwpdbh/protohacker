@@ -39,11 +39,15 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
+    state |> dbg()
+
     case :gen_tcp.recv(state.socket, 0) do
       {:error, reason} ->
         {:stop, reason}
 
       {:ok, packet} ->
+        # dbg(packet)
+
         case Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
           {:ok, message, remaining} ->
             case message do
@@ -75,6 +79,7 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
             end
 
           error ->
+            Logger.warning("->> decode message error: #{inspect(error)}")
             {:stop, error}
         end
     end

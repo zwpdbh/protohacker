@@ -49,6 +49,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
         mile: mile,
         limit: limit
       })
+      |> dbg()
 
     :gen_tcp.send(socket, msg)
   end
@@ -59,6 +60,8 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
         plate: plate,
         timestamp: timestamp
       })
+
+    # |> dbg()
 
     :gen_tcp.send(socket, msg)
   end
@@ -71,6 +74,8 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
           numroads: length(roads)
         }
       )
+
+    # |> dbg()
 
     :gen_tcp.send(socket, msg)
   end

@@ -44,6 +44,8 @@ defmodule Protohacker.SpeedDaemon.Camera do
         {:stop, reason}
 
       {:ok, packet} ->
+        packet |> dbg()
+
         case Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
           {:ok, message, remaining} ->
             case message do
@@ -87,6 +89,7 @@ defmodule Protohacker.SpeedDaemon.Camera do
             end
 
           error ->
+            Logger.warning("->> decode message error: #{inspect(error)}")
             {:stop, error}
         end
     end

@@ -101,6 +101,10 @@ defmodule Protohacker.SpeedDaemon do
                 {Protohacker.SpeedDaemon.TicketDispatcher,
                  socket: socket, supervisor: state.supervisor}
               )
+
+          others ->
+            switch_off_peek(socket)
+            Logger.warning("->> unknow type: #{inspect(others)}")
         end
 
       {:error, reason} ->
