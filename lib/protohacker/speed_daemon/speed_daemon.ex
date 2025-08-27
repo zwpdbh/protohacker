@@ -70,7 +70,7 @@ defmodule Protohacker.SpeedDaemon do
   end
 
   defp switch_on_peek(socket) do
-    :inet.setopts(socket, [{:recv, :peek}])
+    :inet.setopts(socket, [{:recv, :peek}]) |> dbg()
   end
 
   defp switch_off_peek(socket) do
