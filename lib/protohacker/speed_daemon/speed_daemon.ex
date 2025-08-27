@@ -71,13 +71,6 @@ defmodule Protohacker.SpeedDaemon do
             )
 
           {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-            {:ok, _pid} =
-              DynamicSupervisor.start_child(
-                state.supervisor,
-                {Protohacker.SpeedDaemon.TicketDispatcher,
-                 dispatcher: dispatcher, remaining: remaining, socket: socket}
-              )
-
             for each_road <- dispatcher.roads do
               case DynamicSupervisor.start_child(
                      state.supervisor,
@@ -94,6 +87,13 @@ defmodule Protohacker.SpeedDaemon do
                     "->> could not start ticket generator for road: #{each_road}, reason: #{other}"
                   )
               end
+
+              {:ok, _pid} =
+                DynamicSupervisor.start_child(
+                  state.supervisor,
+                  {Protohacker.SpeedDaemon.TicketDispatcher,
+                   dispatcher: dispatcher, remaining: remaining, socket: socket}
+                )
             end
 
           {:error, reason, _data} ->

@@ -36,15 +36,19 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
       socket: socket
     }
 
+    for each_road <- dispatcher.roads do
+      Phoenix.PubSub.broadcast!(
+        :speed_deamon,
+        "ticket_dispatcher_road_#{each_road}",
+        {:dispatcher_online, socket}
+      )
+    end
+
     {:ok, state, {:continue, :accept}}
   end
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
-    for each_road <- state.roads do
-      :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_dispatcher_road_#{each_road}")
-    end
-
     with {:ok, packet} <- :gen_tcp.recv(state.socket, 0),
          {:ok, message, remaining} <-
            Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet),
@@ -74,12 +78,20 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
         :ok
 
       other_message ->
-        {:error, "->> ticket dispatcher, it received: #{other_message}"}
+        {:error, "->> ticket dispatcher, it received other message: #{other_message}"}
     end
   end
 
   @impl true
   def terminate(_reason, %__MODULE__{} = state) do
+    for each_road <- state.roads do
+      Phoenix.PubSub.broadcast!(
+        :speed_daemon,
+        "ticket_dispatcher_road_#{each_road}",
+        :dispatcher_offline
+      )
+    end
+
     :gen_tcp.close(state.socket)
     :ok
   end
