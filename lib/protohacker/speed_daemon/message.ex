@@ -52,7 +52,7 @@ defmodule Protohacker.SpeedDaemon.Message do
 
     Returns:
       {:ok, %Error{msg: string}, rest}  - successfully parsed, with leftover data
-      {:error, remaining}                - invalid or incomplete message
+      {:error, reason}                - invalid or incomplete message
 
     Note: The protocol allows empty strings (length 0).
     """
@@ -65,28 +65,23 @@ defmodule Protohacker.SpeedDaemon.Message do
         decoded_msg = msg_bytes |> to_string()
         {:ok, %__MODULE__{msg: decoded_msg}, remaining}
       else
-        {:error, :invalid_string, %{msg: msg_bytes}}
+        {:error, {:malformed, "string contains non valid ASCII"}}
       end
     end
 
     # Handle incomplete or malformed data
-    def decode(<<0x10, msg_len, rest::binary>>) do
+    def decode(<<0x10, msg_len, rest::binary>> = data) do
       # If we don't have enough data for the string
       if byte_size(rest) < msg_len do
-        {:error, :incomplete, <<0x10, msg_len>> <> rest}
+        {:ok, :incomplete, data}
       else
         # This case should not happen — means pattern didn't match
-        {:error, :malformed, <<0x10, msg_len>> <> rest}
+        {:error, {:malformed, data}}
       end
     end
 
-    def decode(<<0x10>>) do
-      {:error, :incomplete, <<0x10>>}
-    end
-
-    # Wrong message type
-    def decode(data) when is_binary(data) do
-      {:error, :invalid_type, data}
+    def decode(<<0x10>> = data) do
+      {:ok, :incomplete, data}
     end
 
     def encode(msg) when is_binary(msg) do
@@ -115,16 +110,12 @@ defmodule Protohacker.SpeedDaemon.Message do
         plate = plate_str_bytes |> to_string()
         {:ok, %__MODULE__{plate: plate, timestamp: timestamp}, remaining}
       else
-        {:error, :invalid_ascii, %{plate: plate_str_bytes}}
+        {:error, {:malformed, "plate contains non valid ASCII"}}
       end
     end
 
     def decode(<<0x20, _::binary>> = data) do
-      {:error, :invalid_plate_format, data}
-    end
-
-    def decode(data) do
-      {:error, :unknown_format, data}
+      {:ok, :incomplete, data}
     end
 
     def encode(%__MODULE__{} = plate_info) do
@@ -187,16 +178,12 @@ defmodule Protohacker.SpeedDaemon.Message do
            speed: speed
          }, remaining}
       else
-        {:error, :invalid_ascii, %{plate: plate_str_bytes}}
+        {:error, {:malformed, "plate contains non valid ASCII"}}
       end
     end
 
     def decode(<<0x21, _::binary>> = data) do
-      {:error, :invalid_ticket_format, data}
-    end
-
-    def decode(data) do
-      {:error, :unknown_format, data}
+      {:ok, :incomplete, data}
     end
 
     def encode(%__MODULE__{} = data) do
@@ -230,11 +217,7 @@ defmodule Protohacker.SpeedDaemon.Message do
     end
 
     def decode(<<0x40, _::binary>> = data) when is_binary(data) do
-      {:error, :invalid_want_heart__beat_format, data}
-    end
-
-    def decode(data) do
-      {:error, :unknown_format, data}
+      {:ok, :incomplete, data}
     end
 
     def encode(%__MODULE__{} = data) do
@@ -291,11 +274,7 @@ defmodule Protohacker.SpeedDaemon.Message do
     end
 
     def decode(<<0x80, _::binary>> = data) when is_binary(data) do
-      {:error, :invalid_format, data}
-    end
-
-    def decode(data) when is_binary(data) do
-      {:error, :unknown_format, data}
+      {:ok, :incomplete, data}
     end
 
     def encode(%__MODULE__{} = data) do
@@ -344,11 +323,7 @@ defmodule Protohacker.SpeedDaemon.Message do
     end
 
     def decode(<<0x81, _::binary>> = data) when is_binary(data) do
-      {:error, :invalid_format, data}
-    end
-
-    def decode(data) do
-      {:error, :unknow_format, data}
+      {:ok, :incomplete, data}
     end
 
     defp parse_binary_to_array_of_road(<<road::unsigned-16, remaining::binary>> = data, acc)

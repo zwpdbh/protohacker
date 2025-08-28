@@ -60,87 +60,17 @@ defmodule Protohacker.SpeedDaemon do
   def handle_continue(:accept, %__MODULE__{} = state) do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
-        Task.Supervisor.start_child(state.task_supervisor, fn ->
-          handle_accepted_connection(socket, state.supervisor)
-        end)
+        {:ok, _pid} =
+          DynamicSupervisor.start_child(
+            state.supervisor,
+            {Protohacker.SpeedDaemon.Client, socket: socket, supervisor: state.supervisor}
+          )
 
         {:noreply, state, {:continue, :accept}}
 
       {:error, reason} ->
         :gen_tcp.close(state.listen_socket)
         {:stop, reason}
-    end
-  end
-
-  defp handle_accepted_connection(socket, supervisor) do
-    case :gen_tcp.recv(socket, 0) do
-      {:ok, packet} ->
-        case(Protohacker.SpeedDaemon.Message.decode(packet)) do
-          {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
-            {:ok, _pid} = ensure_ticket_generator_started(camera.road, supervisor)
-
-            {:ok, _pid} =
-              DynamicSupervisor.start_child(
-                supervisor,
-                {Protohacker.SpeedDaemon.Camera,
-                 socket: socket, camera: camera, remaining: remaining, supervisor: supervisor}
-              )
-
-          {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-            {:ok, _pid} =
-              DynamicSupervisor.start_child(
-                supervisor,
-                {Protohacker.SpeedDaemon.TicketDispatcher,
-                 socket: socket, dispatcher: dispatcher, remaining: remaining}
-              )
-
-          {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, ""} ->
-            if interval > 0 do
-              # Start heartbeat
-              Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(
-                interval,
-                socket
-              )
-              |> dbg()
-            else
-              # Cancel heartbeat
-              Protohacker.SpeedDaemon.HeartbeatManager.cancel_heartbeat(socket)
-            end
-
-          other_message ->
-            Logger.warning(
-              "->> received unexpected other message: #{inspect(other_message)} from #{__MODULE__}"
-            )
-
-            message =
-              "illegal msg"
-              |> Protohacker.SpeedDaemon.Message.Error.encode()
-
-            :gen_tcp.send(socket, message)
-            :gen_tcp.close(socket)
-        end
-
-      {:error, reason} ->
-        reason |> dbg()
-        :gen_tcp.close(socket)
-    end
-  end
-
-  def ensure_ticket_generator_started(road, supervisor) do
-    ticket_generator_registered = Registry.lookup(TicketGeneratorRegistry, road)
-
-    case ticket_generator_registered do
-      [{pid, _value}] ->
-        {:ok, pid}
-
-      [] ->
-        case DynamicSupervisor.start_child(
-               supervisor,
-               {Protohacker.SpeedDaemon.TicketGenerator, road: road}
-             ) do
-          {:ok, pid} -> {:ok, pid}
-          {:error, {:already_started, pid}} -> {:ok, pid}
-        end
     end
   end
 end
