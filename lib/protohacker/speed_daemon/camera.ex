@@ -24,17 +24,24 @@ defmodule Protohacker.SpeedDaemon.Camera do
 
   def start_link(opts) do
     socket = Keyword.fetch!(opts, :socket)
-    GenServer.start_link(__MODULE__, socket)
+    camera = Keyword.fetch!(opts, :camera)
+    remaining = Keyword.fetch!(opts, :remaining)
+
+    GenServer.start_link(__MODULE__, {socket, camera, remaining})
   end
 
   @impl true
-  def init(socket) do
+  def init({socket, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining})
+      when is_binary(remaining) do
     state = %__MODULE__{
-      socket: socket
+      socket: socket,
+      remaining: remaining,
+      road: camera.road,
+      mile: camera.mile,
+      limit: camera.limit
     }
 
-    :gen_tcp.controlling_process(socket, self())
-    {:ok, %{state | remaining: <<>>}, {:continue, :accept}}
+    {:ok, state, {:continue, :accept}}
   end
 
   @impl true
@@ -44,22 +51,9 @@ defmodule Protohacker.SpeedDaemon.Camera do
         {:stop, reason}
 
       {:ok, packet} ->
-        packet |> dbg()
-
         case Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
           {:ok, message, remaining} ->
             case message do
-              %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera ->
-                updated_state = %{
-                  state
-                  | remaining: remaining,
-                    road: camera.road,
-                    mile: camera.mile,
-                    limit: camera.limit
-                }
-
-                {:noreply, updated_state, {:continue, :accept}}
-
               %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
                 start_heartbeat(state.socket, hb.interval)
 
@@ -102,6 +96,7 @@ defmodule Protohacker.SpeedDaemon.Camera do
   end
 
   def start_heartbeat(socket, interval) do
+    # because the value of interval is 0.1 second unit. So, value 25 means 2.5 seconds
     :timer.send_interval(interval * 100, self(), {:send_heartbeat, socket})
   end
 

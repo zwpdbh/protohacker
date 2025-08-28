@@ -58,7 +58,7 @@ defmodule Protohacker.SpeedDaemon do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
         Task.Supervisor.start_child(state.task_supervisor, fn ->
-          handle_connection(socket, state)
+          handle_connection(socket, state.supervisor)
         end)
 
         {:noreply, state, {:continue, :accept}}
@@ -69,42 +69,37 @@ defmodule Protohacker.SpeedDaemon do
     end
   end
 
-  defp switch_on_peek(socket) do
-    :inet.setopts(socket, [{:recv, :peek}]) |> dbg()
-  end
-
-  defp switch_off_peek(socket) do
-    :inet.setopts(socket, [{:recv, :normal}])
-  end
-
-  defp handle_connection(socket, %__MODULE__{} = state) do
-    switch_on_peek(socket)
-
-    case :gen_tcp.recv(socket, 1, 0) do
-      {:ok, message} ->
-        case message do
-          <<0x80>> ->
-            switch_off_peek(socket)
-
+  defp handle_connection(socket, supervisor) do
+    case :gen_tcp.recv(socket, 0) do
+      {:ok, packet} ->
+        case(Protohacker.SpeedDaemon.Message.decode(packet)) do
+          {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
             {:ok, _pid} =
               DynamicSupervisor.start_child(
-                state.supervisor,
-                {Protohacker.SpeedDaemon.Camera, socket: socket}
+                supervisor,
+                {Protohacker.SpeedDaemon.Camera,
+                 socket: socket, camera: camera, remaining: remaining}
               )
 
-          <<0x81>> ->
-            switch_off_peek(socket)
+          {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
+            for each_road <- dispatcher.roads do
+              DynamicSupervisor.start_child(
+                supervisor,
+                {Protohacker.SpeedDaemon.TicketGenerator, socket: socket, road: each_road}
+              )
+            end
 
             {:ok, _pid} =
               DynamicSupervisor.start_child(
-                state.supervisor,
+                supervisor,
                 {Protohacker.SpeedDaemon.TicketDispatcher,
-                 socket: socket, supervisor: state.supervisor}
+                 socket: socket, dispatcher: dispatcher, remaining: remaining}
               )
 
-          others ->
-            switch_off_peek(socket)
-            Logger.warning("->> unknow type: #{inspect(others)}")
+          other_message ->
+            Logger.warning(
+              "->> received other message: #{inspect(other_message)} from #{__MODULE__}"
+            )
         end
 
       {:error, reason} ->
@@ -120,24 +115,4 @@ defmodule Protohacker.SpeedDaemon do
 
     :gen_tcp.send(socket, message)
   end
-
-  # def start_heartbeat(socket, interval) do
-  #   :timer.send_interval(interval * 100, self(), {:send_heartbeat, socket})
-  # end
-
-  # def handle_info({:send_heartbeat, socket}, state) do
-  #   :gen_tcp.send(socket, Protohacker.SpeedDaemon.Message.Heartbeat.encode(%{}))
-  #   {:noreply, state}
-  # end
-
-  # def send_heartbeat_message_loop(interval, socket) do
-  #   message =
-  #     %Protohacker.SpeedDaemon.Message.Heartbeat{}
-  #     |> Protohacker.SpeedDaemon.Message.Heartbeat.encode()
-
-  #   :gen_tcp.send(socket, message)
-  #   Process.sleep(interval * 100)
-
-  #   send_heartbeat_message_loop(interval, socket)
-  # end
 end

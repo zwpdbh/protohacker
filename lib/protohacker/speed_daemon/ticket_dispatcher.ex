@@ -13,58 +13,41 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
 
   defstruct [
     :roads,
-    :myself,
     :remaining,
-    :socket,
-    :supervisor
+    :socket
   ]
 
   def start_link(opts) do
     socket = Keyword.fetch!(opts, :socket)
-    sup = Keyword.fetch!(opts, :supervisor)
-    GenServer.start_link(__MODULE__, {socket, sup})
+    dispatcher = Keyword.fetch!(opts, :dispatcher)
+    remaining = Keyword.fetch!(opts, :remaining)
+    GenServer.start_link(__MODULE__, {socket, dispatcher, remaining})
   end
 
   @impl true
-  def init({socket, sup}) do
-    state = %__MODULE__{
-      socket: socket,
-      remaining: <<>>,
-      supervisor: sup
-    }
+  def init({socket, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining}) do
+    state =
+      %__MODULE__{
+        socket: socket,
+        remaining: remaining,
+        roads: dispatcher.roads
+      }
 
-    :gen_tcp.controlling_process(socket, self())
+    # |> dbg(charlists: :as_lists)
+
     {:ok, state, {:continue, :accept}}
   end
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
-    state |> dbg()
-
-    case :gen_tcp.recv(state.socket, 0) do
+    case :gen_tcp.recv(state.socket, 0) |> dbg() do
       {:error, reason} ->
         {:stop, reason}
 
       {:ok, packet} ->
-        # dbg(packet)
-
-        case Protohacker.SpeedDaemon.Message.decode(state.remaining <> packet) do
+        case Protohacker.SpeedDaemon.Message.decode((state.remaining <> packet) |> dbg()) do
           {:ok, message, remaining} ->
             case message do
-              %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher ->
-                for each_road <- dispatcher.roads do
-                  DynamicSupervisor.start_child(
-                    state.supervisor,
-                    {Protohacker.SpeedDaemon.TicketGenerator,
-                     road: each_road, dispatcher_socket: state.socket}
-                  )
-                end
-
-                updated_state =
-                  %{state | remaining: remaining, roads: dispatcher.roads}
-
-                {:noreply, updated_state, {:continue, :accept}}
-
               %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
                 start_heartbeat(state.socket, hb.interval)
 
@@ -86,6 +69,7 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
   end
 
   def start_heartbeat(socket, interval) do
+    # because the value of interval is 0.1 second unit. So, value 25 means 2.5 seconds
     :timer.send_interval(interval * 100, self(), {:send_heartbeat, socket})
   end
 
