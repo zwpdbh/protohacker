@@ -56,7 +56,16 @@ defmodule Protohacker.SpeedDaemon.Camera do
           {:ok, message, remaining} ->
             case message do
               %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
-                start_heartbeat(hb.interval)
+                if hb.interval > 0 do
+                  # Start heartbeat
+                  Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(
+                    hb.interval,
+                    state.socket
+                  )
+                else
+                  # Cancel heartbeat
+                  Protohacker.SpeedDaemon.HeartbeatManager.cancel_heartbeat(state.socket)
+                end
 
                 {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
 
@@ -97,22 +106,5 @@ defmodule Protohacker.SpeedDaemon.Camera do
   def terminate(_reason, %__MODULE__{} = state) do
     :gen_tcp.close(state.socket)
     :ok
-  end
-
-  def start_heartbeat(interval) do
-    # because the value of interval is 0.1 second unit. So, value 25 means 2.5 seconds
-    :timer.send_interval(interval * 100, self(), :send_heartbeat)
-  end
-
-  @impl true
-  def handle_info(:send_heartbeat, %__MODULE__{} = state) do
-    :gen_tcp.send(
-      state.socket,
-      Protohacker.SpeedDaemon.Message.Heartbeat.encode(
-        %Protohacker.SpeedDaemon.Message.Heartbeat{}
-      )
-    )
-
-    {:noreply, state}
   end
 end

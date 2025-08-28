@@ -36,7 +36,10 @@ defmodule Protohacker.SpeedDaemon do
          {:ok, _pid} <- Registry.start_link(keys: :unique, name: TicketGeneratorRegistry),
          {:ok, sup} <- DynamicSupervisor.start_link(strategy: :one_for_one),
          {:ok, task_sup} <- Task.Supervisor.start_link(max_children: 100),
-         {:ok, _pid} <- DynamicSupervisor.start_child(sup, {Phoenix.PubSub, name: :speed_daemon}) do
+         {:ok, _pid} <- DynamicSupervisor.start_child(sup, {Phoenix.PubSub, name: :speed_daemon}),
+         # Start HeartbeatManager as a child of our DynamicSupervisor
+         {:ok, _heartbeat_manager_pid} <-
+           DynamicSupervisor.start_child(sup, Protohacker.SpeedDaemon.HeartbeatManager) do
       Logger.info("->> start speed_daemon server at port: #{@port}")
 
       state = %__MODULE__{
@@ -90,6 +93,18 @@ defmodule Protohacker.SpeedDaemon do
                 {Protohacker.SpeedDaemon.TicketDispatcher,
                  socket: socket, dispatcher: dispatcher, remaining: remaining}
               )
+
+          {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, ""} ->
+            if interval > 0 do
+              # Start heartbeat
+              Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(
+                interval,
+                socket
+              )
+            else
+              # Cancel heartbeat
+              Protohacker.SpeedDaemon.HeartbeatManager.cancel_heartbeat(socket)
+            end
 
           other_message ->
             Logger.warning(

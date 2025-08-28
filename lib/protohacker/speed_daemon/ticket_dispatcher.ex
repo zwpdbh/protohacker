@@ -63,7 +63,9 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
           {:ok, message, remaining} ->
             case message do
               %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
-                start_heartbeat(hb.interval, myself)
+                :ok =
+                  Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(hb.interval, socket)
+
                 handle_connection_loop(socket, remaining, myself)
 
               other_message ->
@@ -88,23 +90,6 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
       {:error, reason} ->
         {:stop, reason}
     end
-  end
-
-  def start_heartbeat(interval, myself) when is_pid(myself) do
-    # because the value of interval is 0.1 second unit. So, value 25 means 2.5 seconds
-    :timer.send_interval(interval * 100, myself, :send_heartbeat)
-  end
-
-  @impl true
-  def handle_info(:send_heartbeat, %__MODULE__{} = state) do
-    :gen_tcp.send(
-      state.socket,
-      Protohacker.SpeedDaemon.Message.Heartbeat.encode(
-        %Protohacker.SpeedDaemon.Message.Heartbeat{}
-      )
-    )
-
-    {:noreply, state}
   end
 
   # In TicketDispatcher.ex
