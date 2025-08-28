@@ -21,21 +21,19 @@ defmodule Protohacker.SpeedDaemon.Client do
   def init(opts) do
     socket = Keyword.fetch!(opts, :socket)
     supervisor = Keyword.fetch!(opts, :supervisor)
-    {:ok, task_supervisor} = Task.Supervisor.start_link(max_children: 1)
 
     {:ok,
      %__MODULE__{
        socket: socket,
        buffer: <<>>,
        supervisor: supervisor,
-       task_supervisor: task_supervisor,
        myself: self()
      }, {:continue, :recv}}
   end
 
   @impl true
   def handle_continue(:recv, %__MODULE__{} = state) do
-    Task.Supervisor.start_child(state.task_supervisor, fn ->
+    Task.start(fn ->
       recv_loop(state.myself, state.socket, "")
     end)
 
@@ -74,6 +72,11 @@ defmodule Protohacker.SpeedDaemon.Client do
       {:error, reason} ->
         send(myself, {:recv_error, reason})
     end
+  end
+
+  @impl true
+  def handle_info({:recv_error, reason}, state) do
+    {:stop, reason, state}
   end
 
   @impl true
