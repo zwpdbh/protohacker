@@ -12,103 +12,126 @@ defmodule Protohacker.SpeedDaemon.Client do
     :buffer,
     :supervisor,
     :camera,
-    :dispatcher
+    :dispatcher,
+    :task_supervisor,
+    :myself
   ]
 
   @impl true
   def init(opts) do
     socket = Keyword.fetch!(opts, :socket)
     supervisor = Keyword.fetch!(opts, :supervisor)
+    {:ok, task_supervisor} = Task.Supervisor.start_link(max_children: 1)
 
-    :ok = :inet.setopts(socket, active: :once) |> dbg()
-
-    {:ok, %__MODULE__{socket: socket, buffer: <<>>, supervisor: supervisor}}
+    {:ok,
+     %__MODULE__{
+       socket: socket,
+       buffer: <<>>,
+       supervisor: supervisor,
+       task_supervisor: task_supervisor,
+       myself: self()
+     }, {:continue, :recv}}
   end
 
   @impl true
-  def handle_info(
-        {:tcp, _socket, <<_type, _rest::binary>> = packet},
-        %__MODULE__{buffer: buffer} = state
-      ) do
-    state |> dbg()
+  def handle_continue(:recv, %__MODULE__{} = state) do
+    Task.Supervisor.start_child(state.task_supervisor, fn ->
+      recv_loop(state.myself, state.socket, "")
+    end)
 
-    case Protohacker.SpeedDaemon.Message.decode(buffer <> packet) do
-      {:ok, :incomplete, data} ->
-        :ok = :inet.setopts(state.socket, active: :once)
-        {:noreply, %{state | buffer: data}}
+    {:noreply, state}
+  end
 
-      {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
-        {:ok, _pid} = ensure_ticket_generator_started(camera.road, state.supervisor)
+  defp recv_loop(myself, socket, buffer) do
+    case :gen_tcp.recv(socket, 0) do
+      {:ok, packet} ->
+        Logger.info("->> #{inspect(myself)} #{inspect(socket)} received: #{inspect(packet)}")
 
-        :ok = :inet.setopts(state.socket, active: :once)
-        {:noreply, %{state | buffer: remaining, role: :camera, camera: camera}}
+        case Protohacker.SpeedDaemon.Message.decode(buffer <> packet) do
+          {:ok, :incomplete, data} ->
+            recv_loop(myself, socket, data)
 
-      {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-        for each_road <- dispatcher.roads do
-          :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
+          {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
+            send(myself, {:i_am_camera, camera})
+            recv_loop(myself, socket, remaining)
+
+          {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
+            send(myself, {:i_am_dispatcher, dispatcher})
+            recv_loop(myself, socket, remaining)
+
+          {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
+            send(myself, {:want_heartbeat, interval})
+            recv_loop(myself, socket, remaining)
+
+          {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
+            send(myself, {:plate, plate})
+            recv_loop(myself, socket, remaining)
+
+          {:error, reason} ->
+            {:stop, reason}
         end
-
-        :ok = :inet.setopts(state.socket, active: :once)
-        {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher}}
-
-      {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
-        if interval > 0 do
-          # Start heartbeat
-          Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(
-            interval,
-            state.socket
-          )
-        else
-          # Cancel heartbeat
-          Protohacker.SpeedDaemon.HeartbeatManager.cancel_heartbeat(state.socket)
-        end
-
-        :ok = :inet.setopts(state.socket, active: :once)
-        {:noreply, %{state | buffer: remaining}}
-
-      {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
-        with :camera <- state.role,
-             camera <- state.camera,
-             true <- not is_nil(camera) do
-          :ok =
-            Phoenix.PubSub.broadcast!(
-              :speed_daemon,
-              "camera_road_#{camera.road}",
-              %{
-                plate: plate.plate,
-                timestamp: plate.timestamp,
-                road: camera.road,
-                mile: camera.mile,
-                limit: camera.limit
-              }
-            )
-        else
-          _ ->
-            Logger.warning("->> received plate info, but its state is: #{inspect(state)}")
-        end
-
-        :ok = :inet.setopts(state.socket, active: :once)
-        {:noreply, %{state | buffer: remaining}}
 
       {:error, reason} ->
-        {:stop, reason}
+        send(myself, {:recv_error, reason})
     end
   end
 
   @impl true
-  def handle_info({:tcp_closed, _socket}, state) do
-    state |> dbg()
-    {:stop, :normal, state}
+  def handle_info({:i_am_camera, camera}, state) do
+    {:ok, _pid} = ensure_ticket_generator_started(camera.road, state.supervisor)
+    {:noreply, %{state | role: :camera, camera: camera}}
   end
 
   @impl true
-  def handle_info({:tcp_error, _socket, reason}, state) do
-    state |> dbg()
+  def handle_info({:i_am_dispatcher, dispatcher}, state) do
+    for each_road <- dispatcher.roads do
+      :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
+    end
 
-    {:stop, reason, state}
+    {:noreply, %{state | role: :dispatcher, dispatcher: dispatcher}}
   end
 
-  # In TicketDispatcher.ex
+  @impl true
+  def handle_info({:plate, plate}, %__MODULE__{} = state) do
+    with :camera <- state.role,
+         camera <- state.camera,
+         true <- not is_nil(camera) do
+      :ok =
+        Phoenix.PubSub.broadcast!(
+          :speed_daemon,
+          "camera_road_#{camera.road}",
+          %{
+            plate: plate.plate,
+            timestamp: plate.timestamp,
+            road: camera.road,
+            mile: camera.mile,
+            limit: camera.limit
+          }
+        )
+
+      {:noreply, state}
+    else
+      _ ->
+        {:stop, "only camera could received plate info", state}
+    end
+  end
+
+  @impl true
+  def handle_info({:want_heartbeat, interval}, %__MODULE__{} = state) do
+    if interval > 0 do
+      # Start heartbeat
+      Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(
+        interval,
+        state.socket
+      )
+    else
+      # Cancel heartbeat
+      Protohacker.SpeedDaemon.HeartbeatManager.cancel_heartbeat(state.socket)
+    end
+
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info(
         %Protohacker.SpeedDaemon.Message.Ticket{} = ticket,
@@ -132,14 +155,8 @@ defmodule Protohacker.SpeedDaemon.Client do
   end
 
   @impl true
-  def terminate(reason, %__MODULE__{} = state) do
-    state |> dbg()
+  def terminate(_reason, %__MODULE__{} = state) do
     :gen_tcp.close(state.socket)
-
-    Logger.info(
-      "->> #{__MODULE__} terminating with reason: #{inspect(reason)} and state: #{inspect(state)}"
-    )
-
     :ok
   end
 
