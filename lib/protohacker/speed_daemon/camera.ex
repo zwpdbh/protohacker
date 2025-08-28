@@ -33,13 +33,14 @@ defmodule Protohacker.SpeedDaemon.Camera do
   @impl true
   def init({socket, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining})
       when is_binary(remaining) do
-    state = %__MODULE__{
-      socket: socket,
-      remaining: remaining,
-      road: camera.road,
-      mile: camera.mile,
-      limit: camera.limit
-    }
+    state =
+      %__MODULE__{
+        socket: socket,
+        remaining: remaining,
+        road: camera.road,
+        mile: camera.mile,
+        limit: camera.limit
+      }
 
     {:ok, state, {:continue, :accept}}
   end
@@ -55,22 +56,25 @@ defmodule Protohacker.SpeedDaemon.Camera do
           {:ok, message, remaining} ->
             case message do
               %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
-                start_heartbeat(state.socket, hb.interval)
+                start_heartbeat(hb.interval)
 
                 {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
 
               %Protohacker.SpeedDaemon.Message.Plate{} = plate ->
-                Phoenix.PubSub.broadcast!(
-                  :speed_daemon,
-                  "camera_road_#{state.road}",
-                  %{
-                    plate: plate.plate,
-                    timestamp: plate.timestamp,
-                    road: state.road,
-                    mile: state.mile,
-                    limit: state.limit
-                  }
-                )
+                plate |> dbg()
+
+                :ok =
+                  Phoenix.PubSub.broadcast!(
+                    :speed_daemon,
+                    "camera_road_#{state.road}",
+                    %{
+                      plate: plate.plate,
+                      timestamp: plate.timestamp,
+                      road: state.road,
+                      mile: state.mile,
+                      limit: state.limit
+                    }
+                  )
 
                 {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
 
@@ -95,15 +99,15 @@ defmodule Protohacker.SpeedDaemon.Camera do
     :ok
   end
 
-  def start_heartbeat(socket, interval) do
+  def start_heartbeat(interval) do
     # because the value of interval is 0.1 second unit. So, value 25 means 2.5 seconds
-    :timer.send_interval(interval * 100, self(), {:send_heartbeat, socket})
+    :timer.send_interval(interval * 100, self(), :send_heartbeat)
   end
 
   @impl true
-  def handle_info({:send_heartbeat, socket}, state) do
+  def handle_info(:send_heartbeat, %__MODULE__{} = state) do
     :gen_tcp.send(
-      socket,
+      state.socket,
       Protohacker.SpeedDaemon.Message.Heartbeat.encode(
         %Protohacker.SpeedDaemon.Message.Heartbeat{}
       )

@@ -74,21 +74,16 @@ defmodule Protohacker.SpeedDaemon do
       {:ok, packet} ->
         case(Protohacker.SpeedDaemon.Message.decode(packet)) do
           {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
+            {:ok, _pid} = ensure_ticket_generator_started(camera.road, supervisor)
+
             {:ok, _pid} =
               DynamicSupervisor.start_child(
                 supervisor,
                 {Protohacker.SpeedDaemon.Camera,
-                 socket: socket, camera: camera, remaining: remaining}
+                 socket: socket, camera: camera, remaining: remaining, supervisor: supervisor}
               )
 
           {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-            for each_road <- dispatcher.roads do
-              DynamicSupervisor.start_child(
-                supervisor,
-                {Protohacker.SpeedDaemon.TicketGenerator, socket: socket, road: each_road}
-              )
-            end
-
             {:ok, _pid} =
               DynamicSupervisor.start_child(
                 supervisor,
@@ -98,8 +93,15 @@ defmodule Protohacker.SpeedDaemon do
 
           other_message ->
             Logger.warning(
-              "->> received other message: #{inspect(other_message)} from #{__MODULE__}"
+              "->> received unexpected other message: #{inspect(other_message)} from #{__MODULE__}"
             )
+
+            message =
+              "illegal msg"
+              |> Protohacker.SpeedDaemon.Message.Error.encode()
+
+            :gen_tcp.send(socket, message)
+            :gen_tcp.close(socket)
         end
 
       {:error, reason} ->
@@ -108,11 +110,21 @@ defmodule Protohacker.SpeedDaemon do
     end
   end
 
-  def send_error_message(socket) do
-    message =
-      "illegal msg"
-      |> Protohacker.SpeedDaemon.Message.Error.encode()
+  def ensure_ticket_generator_started(road, supervisor) do
+    ticket_generator_registered = Registry.lookup(TicketGeneratorRegistry, road)
 
-    :gen_tcp.send(socket, message)
+    case ticket_generator_registered do
+      [{pid, _value}] ->
+        {:ok, pid}
+
+      [] ->
+        case DynamicSupervisor.start_child(
+               supervisor,
+               {Protohacker.SpeedDaemon.TicketGenerator, road: road}
+             ) do
+          {:ok, pid} -> {:ok, pid}
+          {:error, {:already_started, pid}} -> {:ok, pid}
+        end
+    end
   end
 end
