@@ -14,7 +14,9 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
   defstruct [
     :roads,
     :remaining,
-    :socket
+    :socket,
+    :supervisor,
+    :myself
   ]
 
   def start_link(opts) do
@@ -26,51 +28,71 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
 
   @impl true
   def init({socket, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining}) do
+    {:ok, sup} = Task.Supervisor.start_link(max_children: 1)
+
     state =
       %__MODULE__{
         socket: socket,
         remaining: remaining,
-        roads: dispatcher.roads
+        roads: dispatcher.roads,
+        supervisor: sup,
+        myself: self()
       }
 
-    # |> dbg(charlists: :as_lists)
+    # Subscribe to ticket topics for each road
+    for road <- dispatcher.roads do
+      Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{road}") |> dbg()
+    end
 
     {:ok, state, {:continue, :accept}}
   end
 
   @impl true
   def handle_continue(:accept, %__MODULE__{} = state) do
-    case :gen_tcp.recv(state.socket, 0) |> dbg() do
-      {:error, reason} ->
-        {:stop, reason}
+    Task.Supervisor.start_child(state.supervisor, fn ->
+      handle_connection_loop(state.socket, state.remaining, state.myself)
+    end)
 
+    {:noreply, state}
+  end
+
+  def handle_connection_loop(socket, remaining, myself) do
+    case :gen_tcp.recv(socket, 0) |> dbg() do
       {:ok, packet} ->
-        case Protohacker.SpeedDaemon.Message.decode((state.remaining <> packet) |> dbg()) do
+        case Protohacker.SpeedDaemon.Message.decode((remaining <> packet) |> dbg()) do
           {:ok, message, remaining} ->
             case message do
               %Protohacker.SpeedDaemon.Message.WantHeartbeat{} = hb ->
-                start_heartbeat(hb.interval)
-
-                {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
+                start_heartbeat(hb.interval, myself)
+                handle_connection_loop(socket, remaining, myself)
 
               other_message ->
                 Logger.warning(
                   "->> TicketDispatcher receive other message: #{inspect(other_message)}"
                 )
 
-                {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
+                handle_connection_loop(socket, remaining, myself)
             end
 
           error ->
             Logger.warning("->> decode message error: #{inspect(error)}")
             {:stop, error}
+
+            message =
+              "illegal msg"
+              |> Protohacker.SpeedDaemon.Message.Error.encode()
+
+            :gen_tcp.send(socket, message)
         end
+
+      {:error, reason} ->
+        {:stop, reason}
     end
   end
 
-  def start_heartbeat(interval) do
+  def start_heartbeat(interval, myself) when is_pid(myself) do
     # because the value of interval is 0.1 second unit. So, value 25 means 2.5 seconds
-    :timer.send_interval(interval * 100, self(), :send_heartbeat)
+    :timer.send_interval(interval * 100, myself, :send_heartbeat)
   end
 
   @impl true
@@ -81,6 +103,26 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
         %Protohacker.SpeedDaemon.Message.Heartbeat{}
       )
     )
+
+    {:noreply, state}
+  end
+
+  # In TicketDispatcher.ex
+  @impl true
+  def handle_info(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket, state) do
+    # Only send if this dispatcher is responsible for the ticket's road
+    if ticket.road in state.roads do
+      ticket_packet = Protohacker.SpeedDaemon.Message.Ticket.encode(ticket)
+
+      case :gen_tcp.send(state.socket, ticket_packet) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning("Failed to send ticket to dispatcher: #{inspect(reason)}")
+          # Ticket lost, per spec
+      end
+    end
 
     {:noreply, state}
   end

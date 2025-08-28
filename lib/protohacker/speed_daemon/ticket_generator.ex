@@ -65,45 +65,38 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
         {prev_mile, prev_timestamp} ->
           # second (or later) seen, calculate the speed
           distance_miles = abs(mile - prev_mile)
-          time_hours = abs(timestamp - prev_timestamp) / 3_600.0
+          time_seconds = abs(timestamp - prev_timestamp)
 
-          if time_hours > 0 do
-            # mph × 100
-            speed_mph = (distance_miles / time_hours * 3_600_000) |> round()
-            speed_mph_float = speed_mph / 100.0
+          speed_mph_float = distance_miles / (time_seconds / 3600)
+          speed_mph = round(speed_mph_float)
 
-            # Ticket if exceeding limit by >=0.5 mph
-            if speed_mph_float >= limit + 0.5 do
-              ticket = %Protohacker.SpeedDaemon.Message.Ticket{
-                plate: plate,
-                road: state.road,
-                mile1: min(mile, prev_mile),
-                timestamp1: min(timestamp, prev_timestamp),
-                mile2: max(mile, prev_mile),
-                timestamp2: max(timestamp, prev_timestamp),
-                # stored as integer (mph × 100)
-                speed: speed_mph
-              }
+          # Ticket if exceeding limit by >=0.5 mph
+          if speed_mph_float >= limit + 0.5 do
+            ticket = %Protohacker.SpeedDaemon.Message.Ticket{
+              plate: plate,
+              road: state.road,
+              mile1: min(mile, prev_mile),
+              timestamp1: min(timestamp, prev_timestamp),
+              mile2: max(mile, prev_mile),
+              timestamp2: max(timestamp, prev_timestamp),
+              # stored as integer (mph × 100)
+              speed: speed_mph * 100
+            }
 
-              Logger.warning("->> generated ticket: #{inspect(ticket)}")
+            Logger.warning("->> generated ticket: #{inspect(ticket)}")
 
-              :ok =
-                Phoenix.PubSub.broadcast!(
-                  :speed_daemon,
-                  "ticket_generated_road_#{ticket.road}",
-                  ticket
-                )
+            :ok =
+              Phoenix.PubSub.broadcast!(
+                :speed_daemon,
+                "ticket_generated_road_#{ticket.road}",
+                ticket
+              )
 
-              new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
-              %{state | plate_first: new_plate_first}
-            else
-              # too slow, just update the record
-              Logger.warning("->> too slow, just update the record")
-              new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
-              %{state | plate_first: new_plate_first}
-            end
+            new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
+            %{state | plate_first: new_plate_first}
           else
-            Logger.warning("->> no time passed -- update to latest")
+            # too slow, just update the record
+            Logger.warning("->> too slow, just update the record")
             new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
             %{state | plate_first: new_plate_first}
           end

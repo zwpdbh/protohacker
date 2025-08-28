@@ -20,6 +20,10 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     {:ok, disp_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
     send_ia_dispatcher(disp_socket, [123])
 
+    # --- WAIT HERE ---
+    # :timer.sleep(5_000)
+    # --- WAIT ENDS ---
+
     # Read the ticket from dispatcher
     assert {:ok, ticket_data} = :gen_tcp.recv(disp_socket, 0, 500)
 
