@@ -83,7 +83,7 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
               speed: speed_mph * 100
             }
 
-            Logger.warning("->> generated ticket: #{inspect(ticket)}")
+            Logger.debug("->> generated ticket: #{inspect(ticket)}")
 
             :ok =
               Phoenix.PubSub.broadcast!(
@@ -96,7 +96,7 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
             %{state | plate_first: new_plate_first}
           else
             # too slow, just update the record
-            Logger.warning("->> too slow, just update the record")
+            Logger.debug("->> too slow, just update the record")
             new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
             %{state | plate_first: new_plate_first}
           end

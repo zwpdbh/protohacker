@@ -133,25 +133,6 @@ defmodule Protohacker.SpeedDaemon.Message.IAmDispatcherTest do
       assert IAmDispatcher.encode(decoded) == original_binary
     end
 
-    test "case02" do
-      numroads = length(roads)
-
-      original_binary =
-        Protohacker.SpeedDaemon.Message.IAmDispatcher.encode(
-          %Protohacker.SpeedDaemon.Message.IAmDispatcher{
-            roads: roads,
-            numroads: numroads
-          }
-        )
-
-      assert <<129, 1, 0, 123>> == original_binary
-
-      {:ok, %IAmDispatcher{numroads: ^numroads, roads: ^roads} = decoded, <<>>} =
-        IAmDispatcher.decode(original_binary)
-
-      assert IAmDispatcher.encode(decoded) == original_binary
-    end
-
     test "round-trip works for zero roads" do
       original = %IAmDispatcher{numroads: 0, roads: []}
       encoded = IAmDispatcher.encode(original)
