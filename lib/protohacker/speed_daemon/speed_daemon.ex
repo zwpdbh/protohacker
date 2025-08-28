@@ -13,7 +13,7 @@ defmodule Protohacker.SpeedDaemon do
     :task_supervisor
   ]
 
-  @port 4004
+  @port 5005
 
   def port() do
     @port
@@ -61,7 +61,7 @@ defmodule Protohacker.SpeedDaemon do
     case :gen_tcp.accept(state.listen_socket) do
       {:ok, socket} ->
         Task.Supervisor.start_child(state.task_supervisor, fn ->
-          handle_connection(socket, state.supervisor)
+          handle_accepted_connection(socket, state.supervisor)
         end)
 
         {:noreply, state, {:continue, :accept}}
@@ -72,7 +72,7 @@ defmodule Protohacker.SpeedDaemon do
     end
   end
 
-  defp handle_connection(socket, supervisor) do
+  defp handle_accepted_connection(socket, supervisor) do
     case :gen_tcp.recv(socket, 0) do
       {:ok, packet} ->
         case(Protohacker.SpeedDaemon.Message.decode(packet)) do
@@ -101,6 +101,7 @@ defmodule Protohacker.SpeedDaemon do
                 interval,
                 socket
               )
+              |> dbg()
             else
               # Cancel heartbeat
               Protohacker.SpeedDaemon.HeartbeatManager.cancel_heartbeat(socket)
@@ -120,7 +121,7 @@ defmodule Protohacker.SpeedDaemon do
         end
 
       {:error, reason} ->
-        Logger.warning("->> #{__MODULE__} handle_connection error: #{inspect(reason)}")
+        reason |> dbg()
         :gen_tcp.close(socket)
     end
   end

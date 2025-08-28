@@ -45,7 +45,7 @@ defmodule Protohacker.SpeedDaemon.HeartbeatManager do
   end
 
   @impl true
-  def handle_call({:cancel_hearbeat, socket}, _from, %__MODULE__{} = state) do
+  def handle_call({:cancel_heartbeat, socket}, _from, %__MODULE__{} = state) do
     # Look up the task for this socket
     case Map.get(state.records, socket) do
       nil ->

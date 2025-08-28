@@ -2,18 +2,18 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
   use ExUnit.Case
 
   @host ~c"localhost"
-  @port 4004
+  @port 5005
 
   test "generates ticket for speeding car and sends to dispatcher" do
     # Connect camera 1
     {:ok, cam1_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
 
-    send_ia_camera(cam1_socket, 123, 8, 60)
+    send_ia_camera(cam1_socket, %{road: 123, mile: 8, limit: 60})
     send_plate(cam1_socket, "UN1X", 0)
 
     # Connect camera 2
     {:ok, cam2_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
-    send_ia_camera(cam2_socket, 123, 9, 60)
+    send_ia_camera(cam2_socket, %{road: 123, mile: 9, limit: 60})
     send_plate(cam2_socket, "UN1X", 45)
 
     # Connect dispatcher
@@ -21,7 +21,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     send_ia_dispatcher(disp_socket, [123])
 
     # --- WAIT HERE ---
-    # :timer.sleep(5_000)
+    # :timer.sleep(1_000)
     # --- WAIT ENDS ---
 
     # Read the ticket from dispatcher
@@ -49,7 +49,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
   test "sends heartbeats at requested interval" do
     # Connect a camera
     {:ok, socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
-    send_ia_camera(socket, 456, 10, 50)
+    send_ia_camera(socket, %{road: 456, mile: 10, limit: 50})
 
     # Request heartbeats every 2.5 seconds (25 deciseconds)
     interval_deciseconds = 25
@@ -61,13 +61,13 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     tolerance_ms = 100
 
     # Receive the first heartbeat
-    assert {:ok, hb1_data} = :gen_tcp.recv(socket, 0, @timeout)
+    assert {:ok, hb1_data} = :gen_tcp.recv(socket, 0) |> dbg()
 
     {:ok, %Protohacker.SpeedDaemon.Message.Heartbeat{}, _} =
       Protohacker.SpeedDaemon.Message.Heartbeat.decode(hb1_data)
 
     # Receive the second heartbeat
-    assert {:ok, hb2_data} = :gen_tcp.recv(socket, 0, @timeout)
+    assert {:ok, hb2_data} = :gen_tcp.recv(socket, 0)
 
     {:ok, %Protohacker.SpeedDaemon.Message.Heartbeat{}, _} =
       Protohacker.SpeedDaemon.Message.Heartbeat.decode(hb2_data)
@@ -90,7 +90,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
   test "sending WantHeartbeat twice is an error" do
     # Connect a camera
     {:ok, socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
-    send_ia_camera(socket, 789, 15, 70)
+    send_ia_camera(socket, %{road: 789, mile: 15, limit: 70})
 
     # Send WantHeartbeat the first time (should be ok)
     # 1 second interval
@@ -101,7 +101,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     send_want_heartbeat(socket, 20)
 
     # The server should send an Error message and close the connection
-    assert {:ok, error_data} = :gen_tcp.recv(socket, 0, @timeout)
+    assert {:ok, error_data} = :gen_tcp.recv(socket, 0)
 
     {:ok, %Protohacker.SpeedDaemon.Message.Error{msg: error_msg}, _} =
       Protohacker.SpeedDaemon.Message.Error.decode(error_data)
@@ -116,7 +116,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     :gen_tcp.close(socket)
   end
 
-  defp send_ia_camera(socket, road, mile, limit) do
+  defp send_ia_camera(socket, %{road: road, mile: mile, limit: limit}) do
     msg =
       Protohacker.SpeedDaemon.Message.IAmCamera.encode(%Protohacker.SpeedDaemon.Message.IAmCamera{
         road: road,

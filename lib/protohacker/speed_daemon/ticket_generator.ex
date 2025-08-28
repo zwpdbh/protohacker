@@ -46,12 +46,10 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   """
   @impl true
   def handle_info(
-        %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road} = info,
+        %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road},
         %__MODULE__{} = state
       )
       when road == state.road do
-    info |> dbg()
-
     day = div(timestamp, 86_400)
     key = {plate, day}
 

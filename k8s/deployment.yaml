@@ -61,6 +61,6 @@ spec:
       targetPort: 4003
       name: "mob-middle"
     - protocol: TCP
-      port: 4004
-      targetPort: 4004
+      port: 5005
+      targetPort: 5005
       name: "speed-daemon"

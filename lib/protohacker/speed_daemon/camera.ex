@@ -70,8 +70,6 @@ defmodule Protohacker.SpeedDaemon.Camera do
                 {:noreply, %{state | remaining: remaining}, {:continue, :accept}}
 
               %Protohacker.SpeedDaemon.Message.Plate{} = plate ->
-                plate |> dbg()
-
                 :ok =
                   Phoenix.PubSub.broadcast!(
                     :speed_daemon,
@@ -103,7 +101,8 @@ defmodule Protohacker.SpeedDaemon.Camera do
   end
 
   @impl true
-  def terminate(_reason, %__MODULE__{} = state) do
+  def terminate(reason, %__MODULE__{} = state) do
+    reason |> dbg()
     :gen_tcp.close(state.socket)
     :ok
   end

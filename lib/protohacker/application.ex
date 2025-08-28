@@ -16,7 +16,7 @@ defmodule Protohacker.Application do
       # {Protohacker.Worker, arg}
       Protohacker.EchoServer,
       Protohacker.PrimeTime,
-      Protohacker.MeansToEnd,
+      # Protohacker.MeansToEnd,
       Protohacker.BudgetChat,
       Protohacker.UnusualDatabase,
       # {Protohacker.MobMiddle, [server: server, port: port]},

@@ -51,7 +51,7 @@ EXPOSE 3005
 EXPOSE 3007
 EXPOSE 3009/udp
 EXPOSE 4003
-EXPOSE 4004
+EXPOSE 5005
 
 # Start the app
 CMD ["bin/protohacker", "start"]

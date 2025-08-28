@@ -57,7 +57,7 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
   end
 
   def handle_connection_loop(socket, remaining, myself) do
-    case :gen_tcp.recv(socket, 0) |> dbg() do
+    case :gen_tcp.recv(socket, 0) do
       {:ok, packet} ->
         case Protohacker.SpeedDaemon.Message.decode((remaining <> packet) |> dbg()) do
           {:ok, message, remaining} ->
@@ -77,17 +77,16 @@ defmodule Protohacker.SpeedDaemon.TicketDispatcher do
             end
 
           error ->
-            Logger.warning("->> decode message error: #{inspect(error)}")
+            error |> dbg()
+
+            "illegal msg"
+            |> Protohacker.SpeedDaemon.Message.Error.encode()
+
             {:stop, error}
-
-            message =
-              "illegal msg"
-              |> Protohacker.SpeedDaemon.Message.Error.encode()
-
-            :gen_tcp.send(socket, message)
         end
 
       {:error, reason} ->
+        reason |> dbg()
         {:stop, reason}
     end
   end
