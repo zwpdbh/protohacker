@@ -172,7 +172,7 @@ defmodule Protohacker.SpeedDaemon.Client do
 
       case :gen_tcp.send(state.socket, ticket_packet) do
         :ok ->
-          :ok
+          Logger.info("->> sent ticket: #{inspect(ticket)}")
 
         {:error, reason} ->
           # Ticket lost, per spec
