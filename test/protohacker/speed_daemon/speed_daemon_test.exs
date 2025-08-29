@@ -21,11 +21,11 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     send_ia_dispatcher(disp_socket, [123])
 
     # --- WAIT HERE ---
-    :timer.sleep(1_000)
+    # :timer.sleep(1_000)
     # --- WAIT ENDS ---
 
     # Read the ticket from dispatcher
-    assert {:ok, ticket_data} = :gen_tcp.recv(disp_socket, 0, 500)
+    assert {:ok, ticket_data} = :gen_tcp.recv(disp_socket, 0, 5000)
 
     # Decode ticket
 

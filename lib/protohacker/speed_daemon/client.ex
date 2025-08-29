@@ -150,9 +150,10 @@ defmodule Protohacker.SpeedDaemon.Client do
             "multiple WantHeartbeat messages on a single connection"
             |> Protohacker.SpeedDaemon.Message.Error.encode()
 
-          :gen_tcp.send(state.socket, msg)
+          :ok = :gen_tcp.send(state.socket, msg)
 
-          {:stop, {:shutdown, "multiple WantHeartbeat messages on a single connection"}, state}
+          {:stop, {:shutdown, "multiple want_heartbeat for client: #{inspect(state.socket)}"},
+           state}
       end
     else
       # Cancel heartbeat
