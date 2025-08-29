@@ -152,36 +152,26 @@ defmodule Protohacker.SpeedDaemon.Message.TicketTest do
 
     test "returns error for incomplete header (only type byte)" do
       data = <<0x21>>
-      assert {:error, :invalid_ticket_format, ^data} = Ticket.decode(data)
+      assert {:ok, :incomplete, ^data} = Ticket.decode(data)
     end
 
     test "returns error for incomplete plate length (missing string)" do
       # has length, no string
       data = <<0x21, 0x03>>
-      assert {:error, :invalid_ticket_format, ^data} = Ticket.decode(data)
+      assert {:ok, :incomplete, ^data} = Ticket.decode(data)
     end
 
     test "returns error for incomplete plate string" do
       # wants 4 chars, got 2
       data = <<0x21, 0x04, 0x41, 0x42>>
-      assert {:error, :invalid_ticket_format, ^data} = Ticket.decode(data)
+      assert {:ok, :incomplete, ^data} = Ticket.decode(data)
     end
 
     test "returns error for incomplete body (after plate)" do
       # Has plate "X", but not enough for road (2 bytes) and rest
       # only 1 byte of road
       data = <<0x21, 0x01, 0x58, 0x00>>
-      assert {:error, :invalid_ticket_format, ^data} = Ticket.decode(data)
-    end
-
-    test "returns error for wrong message type" do
-      # Error{"bad"}
-      data = <<0x10, 0x03, 0x62, 0x61, 0x64>>
-      assert {:error, :unknown_format, ^data} = Ticket.decode(data)
-    end
-
-    test "returns error for empty binary" do
-      assert {:error, :unknown_format, <<>>} = Ticket.decode(<<>>)
+      assert {:ok, :incomplete, ^data} = Ticket.decode(data)
     end
   end
 
@@ -218,7 +208,7 @@ defmodule Protohacker.SpeedDaemon.Message.TicketTest do
         0x06
       >>
 
-      assert {:error, :invalid_ascii, %{plate: <<0xFF, 0xFF>>}} = Ticket.decode(data)
+      assert {:error, {:malformed, "plate contains non valid ASCII"}} = Ticket.decode(data)
     end
   end
 

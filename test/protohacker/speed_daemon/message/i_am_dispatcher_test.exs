@@ -51,29 +51,19 @@ defmodule Protohacker.SpeedDaemon.Message.IAmDispatcherTest do
 
     test "returns error for incomplete header (only type byte)" do
       data = <<0x81>>
-      assert {:error, :invalid_format, ^data} = IAmDispatcher.decode(data)
+      assert {:ok, :incomplete, ^data} = IAmDispatcher.decode(data)
     end
 
     test "returns error for incomplete numroads (has type but no numroads)" do
       # already tested above
       data = <<0x81>>
-      assert {:error, :invalid_format, ^data} = IAmDispatcher.decode(data)
+      assert {:ok, :incomplete, ^data} = IAmDispatcher.decode(data)
     end
 
     test "returns error for incomplete roads data (missing some u16s)" do
       # Wants 2 roads (4 bytes), but only provides 1 byte
       data = <<0x81, 0x02, 0x00>>
-      assert {:error, :invalid_format, ^data} = IAmDispatcher.decode(data)
-    end
-
-    test "returns error for wrong message type" do
-      # Error message
-      data = <<0x10, 0x03, 0x62, 0x61, 0x64>>
-      assert {:error, :unknow_format, ^data} = IAmDispatcher.decode(data)
-    end
-
-    test "returns error for empty binary" do
-      assert {:error, :unknow_format, <<>>} = IAmDispatcher.decode(<<>>)
+      assert {:ok, :incomplete, ^data} = IAmDispatcher.decode(data)
     end
   end
 

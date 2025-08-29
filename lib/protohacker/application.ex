@@ -8,18 +8,18 @@ defmodule Protohacker.Application do
   @impl true
   def start(_type, _args) do
     # Fetch config at startup
-    # server = Application.get_env(:protohacker, :budget_chat_server, ~c"chat.protohackers.com")
-    # port = Application.get_env(:protohacker, :budget_chat_server_port, 16963)
+    server = Application.get_env(:protohacker, :budget_chat_server, ~c"chat.protohackers.com")
+    port = Application.get_env(:protohacker, :budget_chat_server_port, 16963)
 
     children = [
       # Starts a worker by calling: Protohacker.Worker.start_link(arg)
       # {Protohacker.Worker, arg}
       Protohacker.EchoServer,
       Protohacker.PrimeTime,
-      # Protohacker.MeansToEnd,
+      Protohacker.MeansToEnd,
       Protohacker.BudgetChat,
       Protohacker.UnusualDatabase,
-      # {Protohacker.MobMiddle, [server: server, port: port]},
+      {Protohacker.MobMiddle, [server: server, port: port]},
       Protohacker.SpeedDaemon
     ]
 

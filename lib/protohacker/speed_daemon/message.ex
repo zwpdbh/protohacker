@@ -27,7 +27,7 @@ defmodule Protohacker.SpeedDaemon.Message do
       0x41 -> Message.Heartbeat.decode(data)
       0x80 -> Message.IAmCamera.decode(data)
       0x81 -> Message.IAmDispatcher.decode(data)
-      _ -> {:error, :unknown_type, data}
+      _ -> {:error, {:unknown, data}}
     end
   end
 
@@ -82,6 +82,10 @@ defmodule Protohacker.SpeedDaemon.Message do
 
     def decode(<<0x10>> = data) do
       {:ok, :incomplete, data}
+    end
+
+    def decode(data) do
+      {:error, {:unknow, data}}
     end
 
     def encode(msg) when is_binary(msg) do

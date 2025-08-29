@@ -6,6 +6,15 @@ defmodule Protohacker.SpeedDaemon.Client do
     GenServer.start_link(__MODULE__, opts)
   end
 
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      # ← Critical: don't restart after client disconnects
+      restart: :temporary
+    }
+  end
+
   defstruct [
     :role,
     :socket,
@@ -41,7 +50,7 @@ defmodule Protohacker.SpeedDaemon.Client do
   end
 
   defp recv_loop(myself, socket, buffer) do
-    case :gen_tcp.recv(socket, 0, 2_000) do
+    case :gen_tcp.recv(socket, 0, 5_000) do
       {:ok, packet} ->
         Logger.info(
           "->> #{inspect(myself)} #{inspect(socket)} received: #{inspect(packet)}, current_buffer: #{inspect(buffer)}"
@@ -56,7 +65,7 @@ defmodule Protohacker.SpeedDaemon.Client do
 
   # REVIEW: how to parse network data
   defp decode_packet(myself, socket, packet) do
-    case Protohacker.SpeedDaemon.Message.decode(packet) |> dbg() do
+    case Protohacker.SpeedDaemon.Message.decode(packet) do
       {:ok, :incomplete, data} ->
         recv_loop(myself, socket, data)
 
@@ -83,7 +92,7 @@ defmodule Protohacker.SpeedDaemon.Client do
 
   @impl true
   def handle_info({:recv_error, reason}, state) do
-    {:stop, reason, state}
+    {:stop, {:shutdown, reason}, state}
   end
 
   @impl true
@@ -130,16 +139,27 @@ defmodule Protohacker.SpeedDaemon.Client do
   def handle_info({:want_heartbeat, interval}, %__MODULE__{} = state) do
     if interval > 0 do
       # Start heartbeat
-      Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(
-        interval,
-        state.socket
-      )
+      case Protohacker.SpeedDaemon.HeartbeatManager.start_heartbeat(
+             interval,
+             state.socket
+           ) do
+        {:ok, _pid} ->
+          {:noreply, state}
+
+        {:error, _existing_pid} ->
+          msg =
+            "multiple WantHeartbeat messages on a single connection"
+            |> Protohacker.SpeedDaemon.Message.Error.encode()
+
+          :gen_tcp.send(state.socket, msg)
+
+          {:stop, {:shutdown, "multiple WantHeartbeat messages on a single connection"}, state}
+      end
     else
       # Cancel heartbeat
       Protohacker.SpeedDaemon.HeartbeatManager.cancel_heartbeat(state.socket)
+      {:noreply, state}
     end
-
-    {:noreply, state}
   end
 
   @impl true

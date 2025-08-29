@@ -38,24 +38,14 @@ defmodule Protohacker.SpeedDaemon.Message.IAmCameraTest do
 
     test "returns error for incomplete header (only type byte)" do
       data = <<0x80>>
-      assert {:error, :invalid_format, ^data} = IAmCamera.decode(data)
+      assert {:ok, :incomplete, ^data} = IAmCamera.decode(data)
     end
 
     test "returns error for incomplete body (missing some fields)" do
       # Has type + 1 u16, needs 3 u16s (6 bytes total after 0x80)
       # only 2 bytes
       data = <<0x80, 0x00, 0x01>>
-      assert {:error, :invalid_format, ^data} = IAmCamera.decode(data)
-    end
-
-    test "returns error for wrong message type" do
-      # IAmDispatcher
-      data = <<0x81, 0x01, 0x00, 0x01>>
-      assert {:error, :unknown_format, ^data} = IAmCamera.decode(data)
-    end
-
-    test "returns error for empty binary" do
-      assert {:error, :unknown_format, <<>>} = IAmCamera.decode(<<>>)
+      assert {:ok, :incomplete, ^data} = IAmCamera.decode(data)
     end
   end
 

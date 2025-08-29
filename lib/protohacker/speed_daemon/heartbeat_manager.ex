@@ -26,22 +26,20 @@ defmodule Protohacker.SpeedDaemon.HeartbeatManager do
     # Cancel any existing heartbeat for this socket first
     case Map.get(state.records, socket) do
       nil ->
-        :ok
+        # Start a new task
+        {:ok, task_pid} =
+          Task.Supervisor.start_child(state.supervisor, fn -> do_heartbeat(interval, socket) end)
+
+        # Update the records
+        updated_records = Map.put(state.records, socket, task_pid)
+        updated_state = %{state | records: updated_records}
+
+        {:reply, {:ok, task_pid}, updated_state}
 
       task_pid ->
         # Task.Supervisor.terminate_child/2 is the correct way to stop a task
-        Task.Supervisor.terminate_child(state.supervisor, task_pid)
+        {:reply, {:error, task_pid}, state}
     end
-
-    # Start a new task
-    {:ok, task_pid} =
-      Task.Supervisor.start_child(state.supervisor, fn -> do_heartbeat(interval, socket) end)
-
-    # Update the records
-    updated_records = Map.put(state.records, socket, task_pid)
-    updated_state = %{state | records: updated_records}
-
-    {:reply, {:ok, task_pid}, updated_state}
   end
 
   @impl true

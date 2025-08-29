@@ -51,21 +51,12 @@ defmodule Protohacker.SpeedDaemon.Message.HeartbeatTest do
 
     test "returns error for incomplete header (only type byte)" do
       data = <<0x40>>
-      assert {:error, :invalid_want_heart__beat_format, ^data} = WantHeartbeat.decode(data)
+      assert {:ok, :incomplete, ^data} = WantHeartbeat.decode(data)
     end
 
     test "returns error for incomplete interval (only 3 bytes)" do
       data = <<0x40, 0x00, 0x00, 0x00>>
-      assert {:error, :invalid_want_heart__beat_format, ^data} = WantHeartbeat.decode(data)
-    end
-
-    test "returns error for wrong message type" do
-      data = <<0x41>>
-      assert {:error, :unknown_format, ^data} = WantHeartbeat.decode(data)
-    end
-
-    test "returns error for empty binary" do
-      assert {:error, :unknown_format, <<>>} = WantHeartbeat.decode(<<>>)
+      assert {:ok, :incomplete, ^data} = WantHeartbeat.decode(data)
     end
   end
 

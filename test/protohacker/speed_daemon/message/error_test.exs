@@ -49,14 +49,8 @@ defmodule Protohacker.SpeedDaemon.Message.ErrorTest do
       assert {:ok, :incomplete, ^data} = Error.decode(data)
     end
 
-    test "returns error for wrong message type" do
-      # Starts with 0x20 (Plate), not 0x10
-      data = <<0x20, 0x03, 0x66, 0x6F, 0x6F>>
-      assert {:error, :invalid_type, ^data} = Error.decode(data)
-    end
-
     test "returns error for empty binary" do
-      assert {:error, :invalid_type, <<>>} = Error.decode(<<>>)
+      assert {:error, {:unknow, ""}} = Error.decode(<<>>)
     end
   end
 

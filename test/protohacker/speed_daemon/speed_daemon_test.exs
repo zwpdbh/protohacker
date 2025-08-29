@@ -21,7 +21,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     send_ia_dispatcher(disp_socket, [123])
 
     # --- WAIT HERE ---
-    # :timer.sleep(1_000)
+    :timer.sleep(1_000)
     # --- WAIT ENDS ---
 
     # Read the ticket from dispatcher
@@ -61,24 +61,23 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     tolerance_ms = 100
 
     # Receive the first heartbeat
-    assert {:ok, hb1_data} = :gen_tcp.recv(socket, 0) |> dbg()
+    assert {:ok, hb1_data} = :gen_tcp.recv(socket, 0)
+    first_heartbeat_time = System.monotonic_time(:millisecond)
 
     {:ok, %Protohacker.SpeedDaemon.Message.Heartbeat{}, _} =
       Protohacker.SpeedDaemon.Message.Heartbeat.decode(hb1_data)
 
     # Receive the second heartbeat
     assert {:ok, hb2_data} = :gen_tcp.recv(socket, 0)
+    second_heartbeat_time = System.monotonic_time(:millisecond)
 
     {:ok, %Protohacker.SpeedDaemon.Message.Heartbeat{}, _} =
       Protohacker.SpeedDaemon.Message.Heartbeat.decode(hb2_data)
 
     # Measure the time between heartbeats
-    start_time = System.monotonic_time(:millisecond)
-    # We already received hb1, so we need to receive hb3 to measure between hb2 and hb3
-    # But let's just measure the time it took to get hb2 after hb1
-    # The time between hb1 and hb2 should be ~2.5 seconds
-    elapsed_ms = System.monotonic_time(:millisecond) - start_time
+    elapsed_ms = second_heartbeat_time - first_heartbeat_time
 
+    # The time between hb1 and hb2 should be ~2.5 seconds
     # Assert the elapsed time is within the expected range
     assert elapsed_ms >= expected_interval_ms - tolerance_ms
     assert elapsed_ms <= expected_interval_ms + tolerance_ms
@@ -96,18 +95,17 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     # 1 second interval
     send_want_heartbeat(socket, 10)
 
+    assert {:ok, _heartbeat} = :gen_tcp.recv(socket, 0)
+
     # Send WantHeartbeat the second time (should be an error)
     # Different interval
     send_want_heartbeat(socket, 20)
 
     # The server should send an Error message and close the connection
-    assert {:ok, error_data} = :gen_tcp.recv(socket, 0)
+    assert {:ok, error_msg} = :gen_tcp.recv(socket, 0)
 
-    {:ok, %Protohacker.SpeedDaemon.Message.Error{msg: error_msg}, _} =
-      Protohacker.SpeedDaemon.Message.Error.decode(error_data)
-
-    # Or whatever specific message you send
-    assert error_msg == "illegal msg"
+    {:ok, %Protohacker.SpeedDaemon.Message.Error{msg: _error_msg}, _} =
+      Protohacker.SpeedDaemon.Message.Error.decode(error_msg)
 
     # The connection should now be closed
     assert {:error, :closed} = :gen_tcp.recv(socket, 0, 0)

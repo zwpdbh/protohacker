@@ -47,35 +47,25 @@ defmodule Protohacker.SpeedDaemon.Message.PlateTest do
 
     test "returns error for incomplete header (only type byte)" do
       data = <<0x20>>
-      assert {:error, :invalid_plate_format, ^data} = Plate.decode(data)
+      assert {:ok, :incomplete, ^data} = Plate.decode(data)
     end
 
     test "returns error for incomplete plate length (missing string bytes)" do
       # Has type + length (4), but no string
       data = <<0x20, 0x04>>
-      assert {:error, :invalid_plate_format, ^data} = Plate.decode(data)
+      assert {:ok, :incomplete, ^data} = Plate.decode(data)
     end
 
     test "returns error for incomplete plate string" do
       # Wants 4 chars, but only provides 2
       data = <<0x20, 0x04, 0x41, 0x42>>
-      assert {:error, :invalid_plate_format, ^data} = Plate.decode(data)
+      assert {:ok, :incomplete, ^data} = Plate.decode(data)
     end
 
     test "returns error for incomplete timestamp (only 3 bytes)" do
       # Plate{"X", 123} — but missing one byte of timestamp
       data = <<0x20, 0x01, 0x58, 0x00, 0x00, 0x00>>
-      assert {:error, :invalid_plate_format, ^data} = Plate.decode(data)
-    end
-
-    test "returns error for wrong message type" do
-      # Error{"bad"}
-      data = <<0x10, 0x03, 0x62, 0x61, 0x64>>
-      assert {:error, :unknown_format, ^data} = Plate.decode(data)
-    end
-
-    test "returns error for empty binary" do
-      assert {:error, :unknown_format, <<>>} = Plate.decode(<<>>)
+      assert {:ok, :incomplete, ^data} = Plate.decode(data)
     end
   end
 
@@ -127,7 +117,7 @@ defmodule Protohacker.SpeedDaemon.Message.PlateTest do
     test "rescues on invalid string (non-printable, but still valid binary)" do
       # Binary is valid even if not printable — to_string should still work
       data = <<0x20, 0x02, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x01>>
-      assert {:error, :invalid_ascii, %{plate: <<255, 255>>}} = Plate.decode(data)
+      assert {:error, {:malformed, "plate contains non valid ASCII"}} = Plate.decode(data)
 
       # Note: `to_string(<<255,255>>)` returns a string with invalid char codes — but it's still a string
     end

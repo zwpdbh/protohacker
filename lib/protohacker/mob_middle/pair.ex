@@ -113,7 +113,7 @@ defmodule Protohacker.MobMiddle.Pair do
   """
   @impl true
   def handle_info({:task_exit, _which, reason}, %__MODULE__{} = state) do
-    {:stop, reason, state}
+    {:stop, {:shutdown, reason}, state}
   end
 
   # Task monitor down (if task crashes or exits)
