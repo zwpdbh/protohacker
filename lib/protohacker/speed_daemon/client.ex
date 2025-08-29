@@ -175,8 +175,8 @@ defmodule Protohacker.SpeedDaemon.Client do
           :ok
 
         {:error, reason} ->
-          Logger.warning("Failed to send ticket to dispatcher: #{inspect(reason)}")
           # Ticket lost, per spec
+          Logger.warning("->> failed to send ticket to dispatcher: #{inspect(reason)}")
       end
     end
 
@@ -184,7 +184,9 @@ defmodule Protohacker.SpeedDaemon.Client do
   end
 
   @impl true
-  def terminate(_reason, %__MODULE__{} = state) do
+  def terminate(reason, %__MODULE__{} = state) do
+    Logger.warning("->> Client terminate, reason: #{inspect(reason)}, state: #{inspect(state)}")
+
     :gen_tcp.close(state.socket)
     :ok
   end

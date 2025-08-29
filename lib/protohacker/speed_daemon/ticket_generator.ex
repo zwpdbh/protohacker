@@ -75,15 +75,25 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
 
             Logger.debug("->> generated ticket: #{inspect(ticket)}")
 
-            :ok =
-              Phoenix.PubSub.broadcast!(
-                :speed_daemon,
-                "ticket_generated_road_#{ticket.road}",
-                ticket
-              )
+            new_ticket_sent_records =
+              case Map.get(state.ticket_sent_records, key) do
+                nil ->
+                  :ok =
+                    Phoenix.PubSub.broadcast!(
+                      :speed_daemon,
+                      "ticket_generated_road_#{ticket.road}",
+                      ticket
+                    )
+
+                  Map.put(state.ticket_sent_records, key, true)
+
+                _others ->
+                  state.ticket_sent_records
+              end
 
             new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
-            %{state | plate_first: new_plate_first}
+
+            %{state | plate_first: new_plate_first, ticket_sent_records: new_ticket_sent_records}
           else
             # too slow, just update the record
             Logger.debug("->> too slow, just update the record")
