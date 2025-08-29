@@ -21,7 +21,8 @@ defmodule Protohacker.Application do
       Protohacker.UnusualDatabase,
       {Protohacker.MobMiddle, [server: server, port: port]},
       # Protohacker.MobMiddleV2.Supervisor,
-      Protohacker.SpeedDaemon
+      # Protohacker.SpeedDaemon
+      Protohacker.SpeedDaemonV2.Supervisor
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
