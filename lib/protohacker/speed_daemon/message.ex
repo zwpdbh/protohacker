@@ -123,7 +123,7 @@ defmodule Protohacker.SpeedDaemon.Message do
     end
 
     def encode(%__MODULE__{} = plate_info) do
-      <<0x20, byte_size(plate_info.plate), plate_info.plate::binary,
+      <<0x20, byte_size(plate_info.plate)::8, plate_info.plate::binary,
         plate_info.timestamp::unsigned-integer-32>>
     end
   end
@@ -316,29 +316,35 @@ defmodule Protohacker.SpeedDaemon.Message do
       :roads
     ]
 
-    def decode(
-          <<0x81, numroads::unsigned-8, roads::binary-size(2 * numroads), remaining::binary>> =
-            data
-        )
-        when is_binary(data) do
-      roads = parse_binary_to_array_of_road(roads, [])
-
+    def decode(<<0x81, numroads::8, roads::binary-size(2 * numroads), remaining::binary>>) do
+      # REVIEW: binary comprehension
+      roads = for <<road::16 <- roads>>, do: road
       {:ok, %__MODULE__{numroads: numroads, roads: roads}, remaining}
     end
+
+    # def decode(
+    #       <<0x81, numroads::unsigned-8, roads::binary-size(2 * numroads), remaining::binary>> =
+    #         data
+    #     )
+    #     when is_binary(data) do
+    #   roads = parse_binary_to_array_of_road(roads, [])
+
+    #   {:ok, %__MODULE__{numroads: numroads, roads: roads}, remaining}
+    # end
 
     def decode(<<0x81, _::binary>> = data) when is_binary(data) do
       {:ok, :incomplete, data}
     end
 
-    defp parse_binary_to_array_of_road(<<road::unsigned-16, remaining::binary>> = data, acc)
-         when is_binary(data) do
-      parse_binary_to_array_of_road(remaining, acc ++ [road])
-    end
+    # defp parse_binary_to_array_of_road(<<road::unsigned-16, remaining::binary>> = data, acc)
+    #      when is_binary(data) do
+    #   parse_binary_to_array_of_road(remaining, acc ++ [road])
+    # end
 
-    defp parse_binary_to_array_of_road(<<>> = data, acc)
-         when is_binary(data) do
-      acc
-    end
+    # defp parse_binary_to_array_of_road(<<>> = data, acc)
+    #      when is_binary(data) do
+    #   acc
+    # end
 
     def encode(%__MODULE__{} = data) do
       roads_binary = encode_array_of_roads_to_binary(data.roads, <<>>)
