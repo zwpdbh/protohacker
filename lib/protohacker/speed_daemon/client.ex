@@ -41,36 +41,43 @@ defmodule Protohacker.SpeedDaemon.Client do
   end
 
   defp recv_loop(myself, socket, buffer) do
-    case :gen_tcp.recv(socket, 0) do
+    case :gen_tcp.recv(socket, 0, 2_000) do
       {:ok, packet} ->
-        Logger.info("->> #{inspect(myself)} #{inspect(socket)} received: #{inspect(packet)}")
+        Logger.info(
+          "->> #{inspect(myself)} #{inspect(socket)} received: #{inspect(packet)}, current_buffer: #{inspect(buffer)}"
+        )
 
-        case Protohacker.SpeedDaemon.Message.decode(buffer <> packet) do
-          {:ok, :incomplete, data} ->
-            recv_loop(myself, socket, data)
-
-          {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
-            send(myself, {:i_am_camera, camera})
-            recv_loop(myself, socket, remaining)
-
-          {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-            send(myself, {:i_am_dispatcher, dispatcher})
-            recv_loop(myself, socket, remaining)
-
-          {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
-            send(myself, {:want_heartbeat, interval})
-            recv_loop(myself, socket, remaining)
-
-          {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
-            send(myself, {:plate, plate})
-            recv_loop(myself, socket, remaining)
-
-          {:error, reason} ->
-            {:stop, reason}
-        end
+        decode_packet(myself, socket, buffer <> packet)
 
       {:error, reason} ->
         send(myself, {:recv_error, reason})
+    end
+  end
+
+  # REVIEW: how to parse network data
+  defp decode_packet(myself, socket, packet) do
+    case Protohacker.SpeedDaemon.Message.decode(packet) |> dbg() do
+      {:ok, :incomplete, data} ->
+        recv_loop(myself, socket, data)
+
+      {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
+        send(myself, {:i_am_camera, camera})
+        decode_packet(myself, socket, remaining)
+
+      {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
+        send(myself, {:i_am_dispatcher, dispatcher})
+        decode_packet(myself, socket, remaining)
+
+      {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
+        send(myself, {:want_heartbeat, interval})
+        decode_packet(myself, socket, remaining)
+
+      {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
+        send(myself, {:plate, plate})
+        decode_packet(myself, socket, remaining)
+
+      {:error, reason} ->
+        {:stop, reason}
     end
   end
 

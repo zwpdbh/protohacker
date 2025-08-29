@@ -32,7 +32,7 @@ defmodule Protohacker.SpeedDaemon.Message do
   end
 
   def decode(data) when is_binary(data) do
-    {:error, :incomplete, data}
+    {:ok, :incomplete, data}
   end
 
   defmodule Error do

@@ -34,19 +34,19 @@ defmodule Protohacker.SpeedDaemon.Message.ErrorTest do
       data = <<0x10, 0x05, 0x68, 0x69>>
 
       # This fails in the second clause: not enough data for `binary-size(5)`
-      assert {:error, :incomplete, ^data} = Error.decode(data)
+      assert {:ok, :incomplete, ^data} = Error.decode(data)
     end
 
     test "returns error for incomplete header (missing length)" do
       # Only type byte
       data = <<0x10>>
-      assert {:error, :incomplete, ^data} = Error.decode(data)
+      assert {:ok, :incomplete, ^data} = Error.decode(data)
     end
 
     test "returns error for incomplete header (has length but no string)" do
       # Has length 3, but no string bytes
       data = <<0x10, 0x03>>
-      assert {:error, :incomplete, ^data} = Error.decode(data)
+      assert {:ok, :incomplete, ^data} = Error.decode(data)
     end
 
     test "returns error for wrong message type" do
