@@ -33,13 +33,15 @@ defmodule Protohacker.SpeedDaemon do
     ]
 
     with {:ok, listen_socket} <- :gen_tcp.listen(@port, options),
-         {:ok, _pid} <- Registry.start_link(keys: :unique, name: TicketGeneratorRegistry),
+         #  {:ok, _pid} <- Registry.start_link(keys: :unique, name: TicketGeneratorRegistry),
          {:ok, sup} <- DynamicSupervisor.start_link(strategy: :one_for_one),
          {:ok, task_sup} <- Task.Supervisor.start_link(max_children: 100),
          {:ok, _pid} <- DynamicSupervisor.start_child(sup, {Phoenix.PubSub, name: :speed_daemon}),
          # Start HeartbeatManager as a child of our DynamicSupervisor
          {:ok, _heartbeat_manager_pid} <-
-           DynamicSupervisor.start_child(sup, Protohacker.SpeedDaemon.HeartbeatManager) do
+           DynamicSupervisor.start_child(sup, Protohacker.SpeedDaemon.HeartbeatManager),
+         {:ok, _ticket_generator} <-
+           DynamicSupervisor.start_child(sup, Protohacker.SpeedDaemon.TicketGenerator) do
       Logger.info("->> start speed_daemon server at port: #{@port}")
 
       state = %__MODULE__{

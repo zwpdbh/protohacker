@@ -4,7 +4,6 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   alias Phoenix.PubSub
 
   defstruct [
-    :road,
     # %{ {plate, day} => {mile, timestamp} }
     plate_first: %{},
     # List of unsent tickets (if no dispatcher)
@@ -13,32 +12,26 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   ]
 
   def child_spec(opts) do
-    road = Keyword.fetch!(opts, :road)
-    child_id = "#{__MODULE__}#{road}"
-
     %{
-      id: child_id,
+      id: __MODULE__,
       start: {__MODULE__, :start_link, [opts]},
       # REVIEW: what type it could support and why :worker ?
       type: :worker
     }
   end
 
-  def start_link(opts) do
-    road = Keyword.fetch!(opts, :road)
-
-    name = via_tuple(road)
-    GenServer.start_link(__MODULE__, road, name: name)
+  def start_link([] = _opts) do
+    GenServer.start_link(__MODULE__, :no_state, name: __MODULE__)
   end
 
   # REVIEW: how registry make sure the unique of TicketGenerator given road
-  defp via_tuple(road), do: {:via, Registry, {TicketGeneratorRegistry, road}}
+  # defp via_tuple(road), do: {:via, Registry, {TicketGeneratorRegistry, road}}
 
   @impl true
-  def init(road) when is_number(road) do
+  def init(:no_state) do
     # subscribe to camera events
-    :ok = PubSub.subscribe(:speed_daemon, "camera_road_#{road}")
-    {:ok, %__MODULE__{road: road}}
+    :ok = PubSub.subscribe(:speed_daemon, "camera")
+    {:ok, %__MODULE__{}}
   end
 
   @doc """
@@ -48,8 +41,7 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   def handle_info(
         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road},
         %__MODULE__{} = state
-      )
-      when road == state.road do
+      ) do
     day = div(timestamp, 86_400)
     key = {plate, day}
 
@@ -72,7 +64,7 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
           if speed_mph_float >= limit + 0.5 do
             ticket = %Protohacker.SpeedDaemon.Message.Ticket{
               plate: plate,
-              road: state.road,
+              road: road,
               mile1: min(mile, prev_mile),
               timestamp1: min(timestamp, prev_timestamp),
               mile2: max(mile, prev_mile),

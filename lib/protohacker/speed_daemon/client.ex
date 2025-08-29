@@ -97,7 +97,6 @@ defmodule Protohacker.SpeedDaemon.Client do
 
   @impl true
   def handle_info({:i_am_camera, camera}, state) do
-    {:ok, _pid} = ensure_ticket_generator_started(camera.road, state.supervisor)
     {:noreply, %{state | role: :camera, camera: camera}}
   end
 
@@ -118,7 +117,7 @@ defmodule Protohacker.SpeedDaemon.Client do
       :ok =
         Phoenix.PubSub.broadcast!(
           :speed_daemon,
-          "camera_road_#{camera.road}",
+          "camera",
           %{
             plate: plate.plate,
             timestamp: plate.timestamp,
@@ -190,21 +189,21 @@ defmodule Protohacker.SpeedDaemon.Client do
     :ok
   end
 
-  defp ensure_ticket_generator_started(road, supervisor) do
-    ticket_generator_registered = Registry.lookup(TicketGeneratorRegistry, road)
+  # defp ensure_ticket_generator_started(road, supervisor) do
+  #   ticket_generator_registered = Registry.lookup(TicketGeneratorRegistry, road)
 
-    case ticket_generator_registered do
-      [{pid, _value}] ->
-        {:ok, pid}
+  #   case ticket_generator_registered do
+  #     [{pid, _value}] ->
+  #       {:ok, pid}
 
-      [] ->
-        case DynamicSupervisor.start_child(
-               supervisor,
-               {Protohacker.SpeedDaemon.TicketGenerator, road: road}
-             ) do
-          {:ok, pid} -> {:ok, pid}
-          {:error, {:already_started, pid}} -> {:ok, pid}
-        end
-    end
-  end
+  #     [] ->
+  #       case DynamicSupervisor.start_child(
+  #              supervisor,
+  #              {Protohacker.SpeedDaemon.TicketGenerator, road: road}
+  #            ) do
+  #         {:ok, pid} -> {:ok, pid}
+  #         {:error, {:already_started, pid}} -> {:ok, pid}
+  #       end
+  #   end
+  # end
 end
