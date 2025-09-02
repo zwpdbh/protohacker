@@ -21,13 +21,15 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   compute if the same plate have exceed the limit by compute its recent two event: {mile, timestamp}
   """
   @impl true
-  def handle_cast(
+  def handle_call(
         {:plate_event,
          %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road}},
+        _from,
         %__MODULE__{} = state
       ) do
-    day = div(timestamp, 86_400)
+    day = div(timestamp, 86400)
     key = {plate, day}
+    # key = plate
 
     updated_plate_first =
       case Map.get(state.plate_first, key) do
@@ -56,8 +58,14 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
               speed: speed_mph * 100
             }
 
-            :ok = Protohacker.SpeedDaemon.TicketManager.save_ticket(ticket)
-            Logger.debug("->> generated ticket: #{inspect(ticket)}")
+            Protohacker.SpeedDaemon.TicketManager.save_ticket(ticket)
+
+            :ok =
+              Phoenix.PubSub.broadcast!(
+                :speed_daemon,
+                "ticket_generated_road_#{ticket.road}",
+                ticket
+              )
           else
             # too slow, just update the record
             Logger.debug(
@@ -68,10 +76,10 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
           Map.put(state.plate_first, key, {mile, timestamp})
       end
 
-    {:noreply, %{state | plate_first: updated_plate_first}}
+    {:reply, :ok, %{state | plate_first: updated_plate_first}}
   end
 
   def record_plate(plate_event) do
-    GenServer.cast(__MODULE__, {:plate_event, plate_event})
+    GenServer.call(__MODULE__, {:plate_event, plate_event})
   end
 end

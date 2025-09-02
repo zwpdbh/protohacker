@@ -96,13 +96,14 @@ defmodule Protohacker.SpeedDaemon.Connection do
          {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
-        Protohacker.SpeedDaemon.TicketGenerator.record_plate(%{
-          plate: plate.plate,
-          timestamp: plate.timestamp,
-          road: state.camera.road,
-          mile: state.camera.mile,
-          limit: state.camera.limit
-        })
+        :ok =
+          Protohacker.SpeedDaemon.TicketGenerator.record_plate(%{
+            plate: plate.plate,
+            timestamp: plate.timestamp,
+            road: state.camera.road,
+            mile: state.camera.mile,
+            limit: state.camera.limit
+          })
 
         {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 
