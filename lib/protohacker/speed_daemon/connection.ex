@@ -1,4 +1,4 @@
-defmodule Protohacker.SpeedDaemonV2.Connection do
+defmodule Protohacker.SpeedDaemon.Connection do
   require Logger
   use GenServer
 

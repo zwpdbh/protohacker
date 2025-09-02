@@ -1,7 +1,10 @@
 defmodule Protohacker.SpeedDaemon.TicketGenerator do
   use GenServer
   require Logger
-  alias Phoenix.PubSub
+
+  def start_link([] = _opts) do
+    GenServer.start_link(__MODULE__, :no_state, name: __MODULE__)
+  end
 
   defstruct [
     # %{ {plate, day} => {mile, timestamp} }
@@ -11,26 +14,9 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
     ticket_sent_records: %{}
   ]
 
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      # REVIEW: what type it could support and why :worker ?
-      type: :worker
-    }
-  end
-
-  def start_link([] = _opts) do
-    GenServer.start_link(__MODULE__, :no_state, name: __MODULE__)
-  end
-
-  # REVIEW: how registry make sure the unique of TicketGenerator given road
-  # defp via_tuple(road), do: {:via, Registry, {TicketGeneratorRegistry, road}}
-
   @impl true
   def init(:no_state) do
-    # subscribe to camera events
-    :ok = PubSub.subscribe(:speed_daemon, "camera")
+    :ok = Phoenix.PubSub.subscribe(:speed_daemon, "camera")
     {:ok, %__MODULE__{}}
   end
 

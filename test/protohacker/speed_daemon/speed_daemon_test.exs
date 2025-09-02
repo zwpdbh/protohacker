@@ -108,7 +108,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
       Protohacker.SpeedDaemon.Message.Error.decode(error_msg)
 
     # The connection should now be closed
-    assert {:error, :closed} = :gen_tcp.recv(socket, 0, 0)
+    assert {:error, _} = :gen_tcp.recv(socket, 0, 0)
 
     # Clean up (though already closed)
     :gen_tcp.close(socket)

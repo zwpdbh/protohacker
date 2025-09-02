@@ -1,4 +1,4 @@
-defmodule Protohacker.SpeedDaemonV2.Supervisor do
+defmodule Protohacker.SpeedDaemon.Supervisor do
   use Supervisor
 
   def start_link([] = _opts) do
@@ -10,9 +10,9 @@ defmodule Protohacker.SpeedDaemonV2.Supervisor do
     children = [
       {Registry, keys: :unique, name: TicketGeneratorRegistry},
       {Phoenix.PubSub, name: :speed_daemon},
-      Protohacker.SpeedDaemonV2.ConnectionSupervisor,
-      Protohacker.SpeedDaemonV2.Acceptor,
-      Protohacker.SpeedDaemonV2.TicketGenerator
+      Protohacker.SpeedDaemon.ConnectionSupervisor,
+      Protohacker.SpeedDaemon.Acceptor,
+      Protohacker.SpeedDaemon.TicketGenerator
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

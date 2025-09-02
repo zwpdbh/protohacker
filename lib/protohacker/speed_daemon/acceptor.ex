@@ -1,4 +1,4 @@
-defmodule Protohacker.SpeedDaemonV2.Acceptor do
+defmodule Protohacker.SpeedDaemon.Acceptor do
   require Logger
   # This makes this module could be monitored by a Supervisor
   use Task, restart: :transient
@@ -34,7 +34,7 @@ defmodule Protohacker.SpeedDaemonV2.Acceptor do
         raise "->> faied to accept connection, reason: #{inspect(reason)}"
 
       {:ok, socket} ->
-        Protohacker.SpeedDaemonV2.ConnectionSupervisor.start_child(socket)
+        Protohacker.SpeedDaemon.ConnectionSupervisor.start_child(socket)
         accept_loop(listen_socket)
     end
   end
