@@ -32,8 +32,8 @@ defmodule Protohacker.MobMiddleV2.Connection do
   end
 
   @impl true
-  def handle_info({:tcp_close, socket}, %__MODULE__{socket: socket} = state) do
+  def handle_info({:tcp_closed, socket}, %__MODULE__{socket: socket} = state) do
     Logger.warning("->> tcp connection closed")
-    {:stop, {:normal, :tcp_close}, state}
+    {:stop, {:normal, :tcp_closed}, state}
   end
 end

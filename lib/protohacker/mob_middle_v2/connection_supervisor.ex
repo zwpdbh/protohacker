@@ -5,6 +5,11 @@ defmodule Protohacker.MobMiddleV2.ConnectionSupervisor do
     DynamicSupervisor.start_link(__MODULE__, :no_args, name: __MODULE__)
   end
 
+  @impl true
+  def init(:no_args) do
+    DynamicSupervisor.init(strategy: :one_for_one, max_children: 50)
+  end
+
   def start_child(socket) do
     child_spec = {Protohacker.MobMiddleV2.Connection, socket}
 
@@ -12,10 +17,5 @@ defmodule Protohacker.MobMiddleV2.ConnectionSupervisor do
          :ok <- :gen_tcp.controlling_process(socket, conn) do
       {:ok, conn}
     end
-  end
-
-  @impl true
-  def init(:no_args) do
-    DynamicSupervisor.init(strategy: :one_for_one, max_children: 50)
   end
 end
