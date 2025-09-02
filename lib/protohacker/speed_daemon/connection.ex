@@ -38,6 +38,26 @@ defmodule Protohacker.SpeedDaemon.Connection do
     {:noreply, %__MODULE__{state | buffer: packet <> buffer}, {:continue, :process_packet}}
   end
 
+  # Handle event from subscrition for generated ticket
+  @impl true
+  def handle_info(
+        %Protohacker.SpeedDaemon.Message.Ticket{} = ticket,
+        %__MODULE__{role: :dispatcher, socket: socket} = state
+      ) do
+    Protohacker.SpeedDaemon.TicketManager.send_ticket_to_socket(ticket, socket)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:tcp_error, socket, reason}, %__MODULE__{socket: socket} = state) do
+    {:stop, {:normal, reason}, state}
+  end
+
+  @impl true
+  def handle_info({:tcp_closed, socket}, %__MODULE__{socket: socket} = state) do
+    {:stop, {:normal, :tcp_closed}, state}
+  end
+
   @impl true
   def handle_continue(
         :process_packet,
@@ -88,26 +108,6 @@ defmodule Protohacker.SpeedDaemon.Connection do
       {:error, reason} ->
         {:stop, reason, state}
     end
-  end
-
-  # Handle event from subscrition for generated ticket
-  @impl true
-  def handle_info(
-        %Protohacker.SpeedDaemon.Message.Ticket{} = ticket,
-        %__MODULE__{role: :dispatcher, socket: socket} = state
-      ) do
-    Protohacker.SpeedDaemon.TicketManager.send_ticket_to_socket(ticket, socket)
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:tcp_error, socket, reason}, %__MODULE__{socket: socket} = state) do
-    {:stop, {:normal, reason}, state}
-  end
-
-  @impl true
-  def handle_info({:tcp_closed, socket}, %__MODULE__{socket: socket} = state) do
-    {:stop, {:normal, :tcp_closed}, state}
   end
 
   defp do_heartbeat(interval, socket) do
