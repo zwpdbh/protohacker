@@ -35,7 +35,7 @@ defmodule Protohacker.SpeedDaemon.Connection do
         %__MODULE__{socket: socket, buffer: buffer} = state
       ) do
     :ok = :inet.setopts(socket, active: :once)
-    {:noreply, %__MODULE__{state | buffer: packet <> buffer}, {:continue, :process_packet}}
+    {:noreply, %__MODULE__{state | buffer: buffer <> packet}, {:continue, :process_packet}}
   end
 
   # Handle event from subscrition for generated ticket
@@ -94,14 +94,13 @@ defmodule Protohacker.SpeedDaemon.Connection do
          {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
-        :ok =
-          Phoenix.PubSub.broadcast!(:speed_daemon, "camera", %{
-            plate: plate.plate,
-            timestamp: plate.timestamp,
-            road: state.camera.road,
-            mile: state.camera.mile,
-            limit: state.camera.limit
-          })
+        Protohacker.SpeedDaemon.TicketGenerator.record_plate(%{
+          plate: plate.plate,
+          timestamp: plate.timestamp,
+          road: state.camera.road,
+          mile: state.camera.mile,
+          limit: state.camera.limit
+        })
 
         {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 

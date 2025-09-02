@@ -21,8 +21,9 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
   compute if the same plate have exceed the limit by compute its recent two event: {mile, timestamp}
   """
   @impl true
-  def handle_info(
-        %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road},
+  def handle_cast(
+        {:plate_event,
+         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road}},
         %__MODULE__{} = state
       ) do
     day = div(timestamp, 86_400)
@@ -66,5 +67,9 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
       end
 
     {:noreply, %{state | plate_first: updated_plate_first}}
+  end
+
+  def record_plate(plate_event) do
+    GenServer.cast(__MODULE__, {:plate_event, plate_event})
   end
 end
