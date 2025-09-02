@@ -63,7 +63,7 @@ defmodule Protohacker.SpeedDaemon.Connection do
         :process_packet,
         %__MODULE__{socket: socket, buffer: buffer, heartbeat_supervisor: sup} = state
       ) do
-    case Protohacker.SpeedDaemon.Message.decode(buffer) |> dbg() do
+    case Protohacker.SpeedDaemon.Message.decode(buffer) do
       {:ok, :incomplete, data} ->
         {:noreply, %{state | buffer: data}}
 

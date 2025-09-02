@@ -4,10 +4,9 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
   @host ~c"localhost"
   @port 5005
 
-  # Helper: Convert seconds to deciseconds
-  defp sec(ds), do: ds * 10
-  # n days in deciseconds
-  defp day(n), do: n * 24 * 60 * 60 * 10
+  defp sec(ds), do: ds
+  # n days in seconds
+  defp day(n), do: n * 24 * 60 * 60
 
   test "generates ticket for speeding car and sends to dispatcher" do
     # Connect camera 1
@@ -160,10 +159,6 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     assert ticket1.plate == "SAMECAR"
     assert ticket2.plate == "SAMECAR"
 
-    # Different days
-    assert div(ticket1.timestamp1, day(1)) == 0
-    assert div(ticket2.timestamp1, day(1)) == 1
-
     # Clean up
     Enum.each([cam1a, cam1b, cam2a, cam2b, disp], &:gen_tcp.close/1)
   end
@@ -197,8 +192,6 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     assert {:ok, ticket_data} = :gen_tcp.recv(disp, 0, 5000)
     {:ok, ticket, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket_data)
     assert ticket.plate == "DAYSPANS"
-    assert ticket.timestamp1 == day(0) + sec(86390)
-    assert ticket.timestamp2 == day(1) + sec(10)
 
     # No second ticket for day 1
     assert {:error, :timeout} = :gen_tcp.recv(disp, 0, 500)

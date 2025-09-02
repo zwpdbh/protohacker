@@ -60,7 +60,9 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
             Logger.debug("->> generated ticket: #{inspect(ticket)}")
           else
             # too slow, just update the record
-            Logger.debug("->> too slow, just update the record")
+            Logger.debug(
+              "->> too slow, just update the record, speed_mph_float: #{speed_mph_float}, limit: #{limit}"
+            )
           end
 
           Map.put(state.plate_first, key, {mile, timestamp})

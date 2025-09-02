@@ -43,7 +43,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
 
         Logger.info("->> sent ticket: #{inspect(ticket)}")
 
-        updated_send_record = Map.put(state.send_record, ticket.plate, 1)
+        updated_send_record = Map.put(state.send_record, {ticket.plate, ticket.road}, 1)
         {:noreply, %{state | send_record: updated_send_record}}
 
       _ ->
