@@ -55,9 +55,8 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
               speed: speed_mph * 100
             }
 
-            Logger.debug("->> generated ticket: #{inspect(ticket)}")
             :ok = Protohacker.SpeedDaemon.TicketManager.save_ticket(ticket)
-            Phoenix.PubSub.broadcast!(:speed_daemon, "ticket_generated_road_#{road}", ticket)
+            Logger.debug("->> generated ticket: #{inspect(ticket)}")
           else
             # too slow, just update the record
             Logger.debug("->> too slow, just update the record")

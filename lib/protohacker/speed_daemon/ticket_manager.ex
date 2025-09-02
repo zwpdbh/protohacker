@@ -17,7 +17,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
 
   @impl true
   def handle_call(
-        {:save_ticket, ticket},
+        {:save_ticket, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket},
         _from,
         %__MODULE__{tickets: tickets} = state
       ) do
@@ -30,6 +30,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
           tickets
       end
 
+    Phoenix.PubSub.broadcast!(:speed_daemon, "ticket_generated_road_#{ticket.road}", ticket)
     {:reply, :ok, %{state | tickets: udpated_tickets}}
   end
 
