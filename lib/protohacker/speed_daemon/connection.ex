@@ -90,6 +90,8 @@ defmodule Protohacker.SpeedDaemon.Connection do
           :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
         end
 
+        Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
+
         {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
          {:continue, :process_packet}}
 

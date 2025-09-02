@@ -52,11 +52,29 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
     end
   end
 
+  @impl true
+  def handle_cast(
+        {:dispatcher_is_online, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher},
+        %__MODULE__{} = state
+      ) do
+    for {_plate, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket} <- state.tickets do
+      if ticket.road in dispatcher.roads do
+        Phoenix.PubSub.broadcast!(:speed_daemon, "ticket_generated_road_#{ticket.road}", ticket)
+      end
+    end
+
+    {:noreply, state}
+  end
+
   def save_ticket(ticket) do
     GenServer.call(__MODULE__, {:save_ticket, ticket})
   end
 
   def send_ticket_to_socket(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket, socket) do
     GenServer.cast(__MODULE__, {:send_ticket, ticket, socket})
+  end
+
+  def dispatcher_is_online(%Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher) do
+    GenServer.cast(__MODULE__, {:dispatcher_is_online, dispatcher})
   end
 end
