@@ -23,7 +23,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
         %__MODULE__{} = state
       ) do
     udpated_tickets = Map.put(state.tickets, ticket.plate, ticket)
-    updated_send_record = Map.put(state.send_record, ticket.plate, 0)
+    updated_send_record = Map.put(state.send_record, {ticket.plate, ticket.road}, 0)
 
     Phoenix.PubSub.broadcast!(:speed_daemon, "ticket_generated_road_#{ticket.road}", ticket)
     {:reply, :ok, %{state | tickets: udpated_tickets, send_record: updated_send_record}}
@@ -34,14 +34,14 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
         {:send_ticket, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket, socket},
         %__MODULE__{} = state
       ) do
-    case Map.get(state.send_record, ticket.plate) do
+    case Map.get(state.send_record, {ticket.plate, ticket.road}) do
       0 ->
         :gen_tcp.send(
           socket,
           Protohacker.SpeedDaemon.Message.Ticket.encode(ticket)
         )
 
-        Logger.info("->> send ticket: #{inspect(ticket)}")
+        Logger.info("->> sent ticket: #{inspect(ticket)}")
 
         updated_send_record = Map.put(state.send_record, ticket.plate, 1)
         {:noreply, %{state | send_record: updated_send_record}}

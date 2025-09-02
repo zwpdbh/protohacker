@@ -4,6 +4,11 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
   @host ~c"localhost"
   @port 5005
 
+  # Helper: Convert seconds to deciseconds
+  defp sec(ds), do: ds * 10
+  # n days in deciseconds
+  defp day(n), do: n * 24 * 60 * 60 * 10
+
   test "generates ticket for speeding car and sends to dispatcher" do
     # Connect camera 1
     {:ok, cam1_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
@@ -44,6 +49,162 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     :gen_tcp.close(cam1_socket)
     :gen_tcp.close(cam2_socket)
     :gen_tcp.close(disp_socket)
+  end
+
+  # --- NEW TESTS BELOW ---
+
+  test "sends tickets for two different cars on same day" do
+    # Car 1: ABC123
+    {:ok, cam1a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1a, %{road: 100, mile: 10, limit: 50})
+    # Day 0, 100 sec in
+    send_plate(cam1a, "ABC123", day(0) + sec(100))
+
+    {:ok, cam1b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1b, %{road: 100, mile: 11, limit: 50})
+    send_plate(cam1b, "ABC123", day(0) + sec(110))
+
+    # Car 2: XYZ789
+    {:ok, cam2a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2a, %{road: 100, mile: 20, limit: 50})
+    send_plate(cam2a, "XYZ789", day(0) + sec(200))
+
+    {:ok, cam2b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2b, %{road: 100, mile: 21, limit: 50})
+    send_plate(cam2b, "XYZ789", day(0) + sec(210))
+
+    # Dispatcher for road 100
+    {:ok, disp} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_dispatcher(disp, [100])
+
+    # Should receive two tickets
+    assert {:ok, ticket1_data} = :gen_tcp.recv(disp, 0, 5000)
+    assert {:ok, ticket2_data} = :gen_tcp.recv(disp, 0, 5000)
+
+    {:ok, ticket1, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket1_data)
+    {:ok, ticket2, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket2_data)
+
+    plates = Enum.sort([ticket1.plate, ticket2.plate])
+    assert plates == ["ABC123", "XYZ789"]
+
+    # Clean up
+    Enum.each([cam1a, cam1b, cam2a, cam2b, disp], &:gen_tcp.close/1)
+  end
+
+  test "does not send second ticket for same car on same day" do
+    # Car: DU63QJJ
+    {:ok, cam1a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1a, %{road: 200, mile: 5, limit: 50})
+    # Day 0
+    send_plate(cam1a, "DU63QJJ", day(0) + sec(1000))
+
+    {:ok, cam1b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1b, %{road: 200, mile: 6, limit: 50})
+    send_plate(cam1b, "DU63QJJ", day(0) + sec(1010))
+
+    # Second violation on same day
+    {:ok, cam2a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2a, %{road: 200, mile: 15, limit: 50})
+    send_plate(cam2a, "DU63QJJ", day(0) + sec(2000))
+
+    {:ok, cam2b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2b, %{road: 200, mile: 16, limit: 50})
+    send_plate(cam2b, "DU63QJJ", day(0) + sec(2010))
+
+    # Dispatcher
+    {:ok, disp} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_dispatcher(disp, [200])
+
+    # Should receive only **one** ticket for DU63QJJ
+    assert {:ok, ticket_data} = :gen_tcp.recv(disp, 0, 5000)
+    {:ok, ticket, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket_data)
+    assert ticket.plate == "DU63QJJ"
+
+    # No second ticket
+    assert {:error, :timeout} = :gen_tcp.recv(disp, 0, 500)
+
+    # Clean up
+    Enum.each([cam1a, cam1b, cam2a, cam2b, disp], &:gen_tcp.close/1)
+  end
+
+  test "sends two tickets for same car on different days" do
+    # Violation 1: Day 0
+    {:ok, cam1a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1a, %{road: 300, mile: 1, limit: 50})
+    send_plate(cam1a, "SAMECAR", day(0) + sec(100))
+
+    {:ok, cam1b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1b, %{road: 300, mile: 2, limit: 50})
+    send_plate(cam1b, "SAMECAR", day(0) + sec(110))
+
+    # Violation 2: Day 1
+    {:ok, cam2a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2a, %{road: 300, mile: 10, limit: 50})
+    send_plate(cam2a, "SAMECAR", day(1) + sec(100))
+
+    {:ok, cam2b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2b, %{road: 300, mile: 11, limit: 50})
+    send_plate(cam2b, "SAMECAR", day(1) + sec(110))
+
+    # Dispatcher
+    {:ok, disp} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_dispatcher(disp, [300])
+
+    # Should receive two tickets
+    assert {:ok, ticket1_data} = :gen_tcp.recv(disp, 0, 5000)
+    assert {:ok, ticket2_data} = :gen_tcp.recv(disp, 0, 5000)
+
+    {:ok, ticket1, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket1_data)
+    {:ok, ticket2, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket2_data)
+
+    assert ticket1.plate == "SAMECAR"
+    assert ticket2.plate == "SAMECAR"
+
+    # Different days
+    assert div(ticket1.timestamp1, day(1)) == 0
+    assert div(ticket2.timestamp1, day(1)) == 1
+
+    # Clean up
+    Enum.each([cam1a, cam1b, cam2a, cam2b, disp], &:gen_tcp.close/1)
+  end
+
+  test "ticket spanning two days blocks both days for same car" do
+    # Long violation spanning midnight
+    {:ok, cam1a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1a, %{road: 400, mile: 5, limit: 50})
+    # Just before midnight
+    send_plate(cam1a, "DAYSPANS", day(0) + sec(86390))
+
+    {:ok, cam1b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam1b, %{road: 400, mile: 6, limit: 50})
+    # Just after midnight
+    send_plate(cam1b, "DAYSPANS", day(1) + sec(10))
+
+    # Now try to send another violation on day 1
+    {:ok, cam2a} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2a, %{road: 400, mile: 15, limit: 50})
+    send_plate(cam2a, "DAYSPANS", day(1) + sec(1000))
+
+    {:ok, cam2b} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_camera(cam2b, %{road: 400, mile: 16, limit: 50})
+    send_plate(cam2b, "DAYSPANS", day(1) + sec(1010))
+
+    # Dispatcher
+    {:ok, disp} = :gen_tcp.connect(@host, @port, [:binary, active: false])
+    send_ia_dispatcher(disp, [400])
+
+    # Only one ticket should be sent (for the span)
+    assert {:ok, ticket_data} = :gen_tcp.recv(disp, 0, 5000)
+    {:ok, ticket, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket_data)
+    assert ticket.plate == "DAYSPANS"
+    assert ticket.timestamp1 == day(0) + sec(86390)
+    assert ticket.timestamp2 == day(1) + sec(10)
+
+    # No second ticket for day 1
+    assert {:error, :timeout} = :gen_tcp.recv(disp, 0, 500)
+
+    # Clean up
+    Enum.each([cam1a, cam1b, cam2a, cam2b, disp], &:gen_tcp.close/1)
   end
 
   test "sends heartbeats at requested interval" do
