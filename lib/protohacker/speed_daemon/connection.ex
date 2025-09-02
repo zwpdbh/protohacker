@@ -32,18 +32,25 @@ defmodule Protohacker.SpeedDaemon.Connection do
   @impl true
   def handle_info(
         {:tcp, socket, packet},
-        %__MODULE__{socket: socket, buffer: buffer, heartbeat_supervisor: sup} = state
+        %__MODULE__{socket: socket, buffer: buffer} = state
       ) do
     :ok = :inet.setopts(socket, active: :once)
+    {:noreply, %__MODULE__{state | buffer: packet <> buffer}, {:continue, :process_packet}}
+  end
 
-    case Protohacker.SpeedDaemon.Message.decode(buffer <> packet) do
+  @impl true
+  def handle_continue(
+        :process_packet,
+        %__MODULE__{socket: socket, buffer: buffer, heartbeat_supervisor: sup} = state
+      ) do
+    case Protohacker.SpeedDaemon.Message.decode(buffer) |> dbg() do
       {:ok, :incomplete, data} ->
         {:noreply, %{state | buffer: data}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
         case Task.Supervisor.start_child(sup, fn -> do_heartbeat(interval, socket) end) do
           {:ok, _pid} ->
-            {:noreply, %{state | buffer: remaining}}
+            {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 
           {:error, :max_children} ->
             msg_bytes =
@@ -55,14 +62,16 @@ defmodule Protohacker.SpeedDaemon.Connection do
         end
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
-        {:noreply, %{state | buffer: remaining, role: :camera, camera: camera}}
+        {:noreply, %{state | buffer: remaining, role: :camera, camera: camera},
+         {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
         for each_road <- dispatcher.roads do
           :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
         end
 
-        {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher}}
+        {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
+         {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
         :ok =
@@ -74,32 +83,20 @@ defmodule Protohacker.SpeedDaemon.Connection do
             limit: state.camera.limit
           })
 
-        {:noreply, %{state | buffer: remaining}}
+        {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 
-        # {:error, reason} ->
-        #   {:stop, reason, state}
+      {:error, reason} ->
+        {:stop, reason, state}
     end
   end
 
+  # Handle event from subscrition for generated ticket
   @impl true
   def handle_info(
         %Protohacker.SpeedDaemon.Message.Ticket{} = ticket,
-        %__MODULE__{role: :dispatcher, dispatcher: dispatcher} = state
+        %__MODULE__{role: :dispatcher, socket: socket} = state
       ) do
-    # Only send if this dispatcher is responsible for the ticket's road
-    if ticket.road in dispatcher.roads do
-      ticket_packet = Protohacker.SpeedDaemon.Message.Ticket.encode(ticket)
-
-      case :gen_tcp.send(state.socket, ticket_packet) do
-        :ok ->
-          Logger.info("->> sent ticket: #{inspect(ticket)}")
-
-        {:error, reason} ->
-          # Ticket lost, per spec
-          Logger.warning("->> failed to send ticket to dispatcher: #{inspect(reason)}")
-      end
-    end
-
+    Protohacker.SpeedDaemon.TicketManager.send_ticket_to_socket(ticket, socket)
     {:noreply, state}
   end
 

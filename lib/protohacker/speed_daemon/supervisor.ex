@@ -10,9 +10,10 @@ defmodule Protohacker.SpeedDaemon.Supervisor do
     children = [
       {Registry, keys: :unique, name: TicketGeneratorRegistry},
       {Phoenix.PubSub, name: :speed_daemon},
+      Protohacker.SpeedDaemon.TicketGenerator,
+      Protohacker.SpeedDaemon.TicketManager,
       Protohacker.SpeedDaemon.ConnectionSupervisor,
-      Protohacker.SpeedDaemon.Acceptor,
-      Protohacker.SpeedDaemon.TicketGenerator
+      Protohacker.SpeedDaemon.Acceptor
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

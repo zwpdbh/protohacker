@@ -8,10 +8,7 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
 
   defstruct [
     # %{ {plate, day} => {mile, timestamp} }
-    plate_first: %{},
-    # List of unsent tickets (if no dispatcher)
-    pending_tickets: [],
-    ticket_sent_records: %{}
+    plate_first: %{}
   ]
 
   @impl true
@@ -31,12 +28,11 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
     day = div(timestamp, 86_400)
     key = {plate, day}
 
-    updated_state =
+    updated_plate_first =
       case Map.get(state.plate_first, key) do
         nil ->
           # first see that plate, record it
-          new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
-          %__MODULE__{state | plate_first: new_plate_first}
+          Map.put(state.plate_first, key, {mile, timestamp})
 
         {prev_mile, prev_timestamp} ->
           # second (or later) seen, calculate the speed
@@ -60,34 +56,16 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
             }
 
             Logger.debug("->> generated ticket: #{inspect(ticket)}")
-
-            new_ticket_sent_records =
-              case Map.get(state.ticket_sent_records, key) do
-                nil ->
-                  :ok =
-                    Phoenix.PubSub.broadcast!(
-                      :speed_daemon,
-                      "ticket_generated_road_#{ticket.road}",
-                      ticket
-                    )
-
-                  Map.put(state.ticket_sent_records, key, true)
-
-                _others ->
-                  state.ticket_sent_records
-              end
-
-            new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
-
-            %{state | plate_first: new_plate_first, ticket_sent_records: new_ticket_sent_records}
+            :ok = Protohacker.SpeedDaemon.TicketManager.save_ticket(ticket)
+            Phoenix.PubSub.broadcast!(:speed_daemon, "ticket_generated_road_#{road}", ticket)
           else
             # too slow, just update the record
             Logger.debug("->> too slow, just update the record")
-            new_plate_first = Map.put(state.plate_first, key, {mile, timestamp})
-            %{state | plate_first: new_plate_first}
           end
+
+          Map.put(state.plate_first, key, {mile, timestamp})
       end
 
-    {:noreply, updated_state}
+    {:noreply, %{state | plate_first: updated_plate_first}}
   end
 end
