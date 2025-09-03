@@ -70,6 +70,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
 
           _ ->
             Logger.warning("same ticket has already been sent")
+            send_records
         end
       end)
 
