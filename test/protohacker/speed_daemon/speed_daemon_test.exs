@@ -154,68 +154,68 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
            }
   end
 
-  # # --- NEW TESTS BELOW ---
-  # test "sends tickets for two different cars on same day" do
-  #   {:ok, camera1} = :gen_tcp.connect(@host, @port, [:binary, active: true])
-  #   {:ok, camera2} = :gen_tcp.connect(@host, @port, [:binary, active: true])
-  #   {:ok, camera3} = :gen_tcp.connect(@host, @port, [:binary, active: true])
-  #   {:ok, camera4} = :gen_tcp.connect(@host, @port, [:binary, active: true])
-  #   {:ok, disp} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+  # --- NEW TESTS BELOW ---
+  test "sends tickets for two different cars on same day" do
+    {:ok, camera1} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+    {:ok, camera2} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+    {:ok, camera3} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+    {:ok, camera4} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+    {:ok, disp} = :gen_tcp.connect(@host, @port, [:binary, active: true])
 
-  #   # Car 1: ABC123
-  #   send_message(camera1, %IAmCamera{
-  #     road: 100,
-  #     mile: 10,
-  #     limit: 50
-  #   })
+    # Car 1: ABC123
+    send_message(camera1, %IAmCamera{
+      road: 100,
+      mile: 10,
+      limit: 50
+    })
 
-  #   # Day 0, 100 sec in
-  #   send_message(camera1, %Plate{
-  #     plate: "ABC123",
-  #     timestamp: day(0) + sec(100)
-  #   })
+    # Day 0, 100 sec in
+    send_message(camera1, %Plate{
+      plate: "ABC123",
+      timestamp: day(0) + sec(100)
+    })
 
-  #   send_message(camera2, %IAmCamera{
-  #     road: 100,
-  #     mile: 11,
-  #     limit: 50
-  #   })
+    send_message(camera2, %IAmCamera{
+      road: 100,
+      mile: 11,
+      limit: 50
+    })
 
-  #   send_message(camera2, %Plate{
-  #     plate: "ABC123",
-  #     timestamp: day(0) + sec(110)
-  #   })
+    send_message(camera2, %Plate{
+      plate: "ABC123",
+      timestamp: day(0) + sec(110)
+    })
 
-  #   # Car 2: XYZ789
-  #   send_message(camera3, %IAmCamera{road: 100, mile: 20, limit: 50})
-  #   send_message(camera3, %Plate{plate: "XYZ789", timestamp: day(0) + sec(200)})
+    # Car 2: XYZ789
+    send_message(camera3, %IAmCamera{road: 100, mile: 20, limit: 50})
+    send_message(camera3, %Plate{plate: "XYZ789", timestamp: day(0) + sec(200)})
 
-  #   send_message(camera4, %IAmCamera{
-  #     road: 100,
-  #     mile: 21,
-  #     limit: 50
-  #   })
+    send_message(camera4, %IAmCamera{
+      road: 100,
+      mile: 21,
+      limit: 50
+    })
 
-  #   send_message(camera4, %Plate{
-  #     plate: "XYZ789",
-  #     timestamp: day(0) + sec(210)
-  #   })
+    send_message(camera4, %Plate{
+      plate: "XYZ789",
+      timestamp: day(0) + sec(210)
+    })
 
-  #   # Dispatcher for road 100
-  #   send_message(disp, %IAmDispatcher{
-  #     roads: [100]
-  #   })
+    # Dispatcher for road 100
+    send_message(disp, %IAmDispatcher{
+      roads: [100]
+    })
 
-  #   # Should receive two tickets
-  #   assert_receive {:tcp, ^disp, data1}
-  #   assert {:ok, ticket1, remaining} = Message.decode(data1)
+    # Should receive two tickets
+    assert_receive {:tcp, ^disp, data1}
+    assert {:ok, ticket1, remaining} = Message.decode(data1)
 
-  #   assert_receive {:tcp, ^disp, data2}
-  #   assert {:ok, ticket2, <<>>} = Message.decode(remaining <> data2)
+    assert_receive {:tcp, ^disp, data2}
+    assert {:ok, ticket2, <<>>} = Message.decode(remaining <> data2)
 
-  #   plates = Enum.sort([ticket1.plate, ticket2.plate])
-  #   assert plates == ["ABC123", "XYZ789"]
-  # end
+    plates = Enum.sort([ticket1.plate, ticket2.plate])
+    assert plates == ["ABC123", "XYZ789"]
+  end
 
   # test "does not send second ticket for same car on same day" do
   #   # Car: DU63QJJ
