@@ -8,6 +8,97 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
   # n days in seconds
   defp day(n), do: n * 24 * 60 * 60
 
+  defp send_message(socket, message) do
+    assert :ok = :gen_tcp.send(socket, Protohacker.SpeedDaemon.Message.encode(message))
+  end
+
+  test "ticketing a single car" do
+    {:ok, camera1} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+    {:ok, camera2} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+    {:ok, dispatcher} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+
+    send_message(dispatcher, %Protohacker.SpeedDaemon.Message.IAmDispatcher{roads: [582]})
+
+    send_message(camera1, %Protohacker.SpeedDaemon.Message.IAmCamera{
+      road: 582,
+      mile: 4452,
+      limit: 100
+    })
+
+    send_message(camera1, %Protohacker.SpeedDaemon.Message.Plate{
+      plate: "UK43PKD",
+      timestamp: 203_663
+    })
+
+    send_message(camera2, %Protohacker.SpeedDaemon.Message.IAmCamera{
+      road: 582,
+      mile: 4462,
+      limit: 100
+    })
+
+    send_message(camera2, %Protohacker.SpeedDaemon.Message.Plate{
+      plate: "UK43PKD",
+      timestamp: 203_963
+    })
+
+    assert_receive {:tcp, ^dispatcher, data}
+    assert {:ok, message, <<>>} = Protohacker.SpeedDaemon.Message.decode(data)
+
+    assert message == %Protohacker.SpeedDaemon.Message.Ticket{
+             mile1: 4452,
+             mile2: 4462,
+             plate: "UK43PKD",
+             road: 582,
+             speed: 12000,
+             timestamp1: 203_663,
+             timestamp2: 203_963
+           }
+  end
+
+  test "pending tickets get flushed" do
+    {:ok, camera1} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+    {:ok, camera2} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+
+    send_message(camera1, %Protohacker.SpeedDaemon.Message.IAmCamera{
+      road: 582,
+      mile: 4452,
+      limit: 100
+    })
+
+    send_message(camera2, %Protohacker.SpeedDaemon.Message.IAmCamera{
+      road: 582,
+      mile: 4462,
+      limit: 100
+    })
+
+    send_message(camera1, %Protohacker.SpeedDaemon.Message.Plate{
+      plate: "IT43PRC",
+      timestamp: 203_663
+    })
+
+    send_message(camera2, %Protohacker.SpeedDaemon.Message.Plate{
+      plate: "IT43PRC",
+      timestamp: 203_963
+    })
+
+    # We now have a tickets on road 582, but no dispatcher for it.
+    {:ok, dispatcher} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+    send_message(dispatcher, %Protohacker.SpeedDaemon.Message.IAmDispatcher{roads: [582]})
+
+    assert_receive {:tcp, ^dispatcher, data}, 20_000
+    assert {:ok, message, <<>>} = Protohacker.SpeedDaemon.Message.decode(data)
+
+    assert message == %Protohacker.SpeedDaemon.Message.Ticket{
+             mile1: 4452,
+             mile2: 4462,
+             plate: "IT43PRC",
+             road: 582,
+             speed: 12000,
+             timestamp1: 203_663,
+             timestamp2: 203_963
+           }
+  end
+
   test "generates ticket for speeding car and sends to dispatcher" do
     # Connect camera 1
     {:ok, cam1_socket} = :gen_tcp.connect(@host, @port, [:binary, active: false])
@@ -34,7 +125,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     # Decode ticket
 
     {:ok, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket, _remaining} =
-      Protohacker.SpeedDaemon.Message.Ticket.decode(ticket_data)
+      Protohacker.SpeedDaemon.Message.decode(ticket_data)
 
     assert ticket.plate == "UN1X"
     assert ticket.road == 123
@@ -80,8 +171,8 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     assert {:ok, ticket1_data} = :gen_tcp.recv(disp, 0, 5000)
     assert {:ok, ticket2_data} = :gen_tcp.recv(disp, 0, 5000)
 
-    {:ok, ticket1, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket1_data)
-    {:ok, ticket2, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket2_data)
+    {:ok, ticket1, _} = Protohacker.SpeedDaemon.Message.decode(ticket1_data)
+    {:ok, ticket2, _} = Protohacker.SpeedDaemon.Message.decode(ticket2_data)
 
     plates = Enum.sort([ticket1.plate, ticket2.plate])
     assert plates == ["ABC123", "XYZ789"]
@@ -116,7 +207,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
 
     # Should receive only **one** ticket for DU63QJJ
     assert {:ok, ticket_data} = :gen_tcp.recv(disp, 0, 5000)
-    {:ok, ticket, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket_data)
+    {:ok, ticket, _} = Protohacker.SpeedDaemon.Message.decode(ticket_data)
     assert ticket.plate == "DU63QJJ"
 
     # No second ticket
@@ -153,8 +244,8 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     assert {:ok, ticket1_data} = :gen_tcp.recv(disp, 0, 5000)
     assert {:ok, ticket2_data} = :gen_tcp.recv(disp, 0, 5000)
 
-    {:ok, ticket1, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket1_data)
-    {:ok, ticket2, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket2_data)
+    {:ok, ticket1, _} = Protohacker.SpeedDaemon.Message.decode(ticket1_data)
+    {:ok, ticket2, _} = Protohacker.SpeedDaemon.Message.decode(ticket2_data)
 
     assert ticket1.plate == "SAMECAR"
     assert ticket2.plate == "SAMECAR"
@@ -190,7 +281,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
 
     # Only one ticket should be sent (for the span)
     assert {:ok, ticket_data} = :gen_tcp.recv(disp, 0, 5000)
-    {:ok, ticket, _} = Protohacker.SpeedDaemon.Message.Ticket.decode(ticket_data)
+    {:ok, ticket, _} = Protohacker.SpeedDaemon.Message.decode(ticket_data)
     assert ticket.plate == "DAYSPANS"
 
     # No second ticket for day 1
@@ -219,14 +310,14 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     first_heartbeat_time = System.monotonic_time(:millisecond)
 
     {:ok, %Protohacker.SpeedDaemon.Message.Heartbeat{}, _} =
-      Protohacker.SpeedDaemon.Message.Heartbeat.decode(hb1_data)
+      Protohacker.SpeedDaemon.Message.decode(hb1_data)
 
     # Receive the second heartbeat
     assert {:ok, hb2_data} = :gen_tcp.recv(socket, 0)
     second_heartbeat_time = System.monotonic_time(:millisecond)
 
     {:ok, %Protohacker.SpeedDaemon.Message.Heartbeat{}, _} =
-      Protohacker.SpeedDaemon.Message.Heartbeat.decode(hb2_data)
+      Protohacker.SpeedDaemon.Message.decode(hb2_data)
 
     # Measure the time between heartbeats
     elapsed_ms = second_heartbeat_time - first_heartbeat_time
@@ -258,8 +349,8 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
     # The server should send an Error message and close the connection
     assert {:ok, error_msg} = :gen_tcp.recv(socket, 0)
 
-    {:ok, %Protohacker.SpeedDaemon.Message.Error{msg: _error_msg}, _} =
-      Protohacker.SpeedDaemon.Message.Error.decode(error_msg)
+    {:ok, %Protohacker.SpeedDaemon.Message.Error{message: _error_msg}, _} =
+      Protohacker.SpeedDaemon.Message.decode(error_msg)
 
     # The connection should now be closed
     assert {:error, _} = :gen_tcp.recv(socket, 0, 0)
@@ -270,7 +361,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
 
   defp send_ia_camera(socket, %{road: road, mile: mile, limit: limit}) do
     msg =
-      Protohacker.SpeedDaemon.Message.IAmCamera.encode(%Protohacker.SpeedDaemon.Message.IAmCamera{
+      Protohacker.SpeedDaemon.Message.encode(%Protohacker.SpeedDaemon.Message.IAmCamera{
         road: road,
         mile: mile,
         limit: limit
@@ -281,7 +372,7 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
 
   defp send_plate(socket, plate, timestamp) do
     msg =
-      Protohacker.SpeedDaemon.Message.Plate.encode(%Protohacker.SpeedDaemon.Message.Plate{
+      Protohacker.SpeedDaemon.Message.encode(%Protohacker.SpeedDaemon.Message.Plate{
         plate: plate,
         timestamp: timestamp
       })
@@ -291,23 +382,19 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
 
   defp send_ia_dispatcher(socket, roads) when is_list(roads) do
     msg =
-      Protohacker.SpeedDaemon.Message.IAmDispatcher.encode(
-        %Protohacker.SpeedDaemon.Message.IAmDispatcher{
-          roads: roads,
-          numroads: length(roads)
-        }
-      )
+      %Protohacker.SpeedDaemon.Message.IAmDispatcher{
+        roads: roads
+      }
+      |> Protohacker.SpeedDaemon.Message.encode()
 
     :gen_tcp.send(socket, msg)
   end
 
   defp send_want_heartbeat(socket, interval) do
     msg =
-      Protohacker.SpeedDaemon.Message.WantHeartbeat.encode(
-        %Protohacker.SpeedDaemon.Message.WantHeartbeat{
-          interval: interval
-        }
-      )
+      Protohacker.SpeedDaemon.Message.encode(%Protohacker.SpeedDaemon.Message.WantHeartbeat{
+        interval: interval
+      })
 
     :gen_tcp.send(socket, msg)
   end

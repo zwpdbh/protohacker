@@ -62,7 +62,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
           0 ->
             :gen_tcp.send(
               socket,
-              Protohacker.SpeedDaemon.Message.Ticket.encode(ticket)
+              Protohacker.SpeedDaemon.Message.encode(ticket)
             )
 
             Logger.info("->> send_ticket, key: #{inspect(each_key)}, ticket: #{inspect(ticket)}")
@@ -81,9 +81,10 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
         {:dispatcher_is_online, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher},
         %__MODULE__{} = state
       ) do
-    for {_key, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket} <- state.tickets do
+    for {{_ticket_plate, _day} = key, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket} <-
+          state.tickets do
       with true <- ticket.road in dispatcher.roads,
-           0 <- Map.get(state.send_record, {ticket.plate, ticket.road}) do
+           0 <- Map.get(state.send_record, key) do
         :ok =
           Phoenix.PubSub.broadcast!(:speed_daemon, "ticket_generated_road_#{ticket.road}", ticket)
       end

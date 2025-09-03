@@ -1,17 +1,9 @@
 defmodule Protohacker.SpeedDaemon.Connection do
   require Logger
-  use GenServer
+  use GenServer, restart: :temporary
 
   def start_link(socket) do
     GenServer.start_link(__MODULE__, socket)
-  end
-
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      restart: :temporary
-    }
   end
 
   defstruct [
@@ -64,8 +56,8 @@ defmodule Protohacker.SpeedDaemon.Connection do
         %__MODULE__{socket: socket, buffer: buffer, heartbeat_supervisor: sup} = state
       ) do
     case Protohacker.SpeedDaemon.Message.decode(buffer) do
-      {:ok, :incomplete, data} ->
-        {:noreply, %{state | buffer: data}}
+      :incomplete ->
+        {:noreply, %{state | buffer: buffer}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
         case Task.Supervisor.start_child(sup, fn -> do_heartbeat(interval, socket) end) do
@@ -74,8 +66,8 @@ defmodule Protohacker.SpeedDaemon.Connection do
 
           {:error, :max_children} ->
             msg_bytes =
-              "multiple heartbeat"
-              |> Protohacker.SpeedDaemon.Message.Error.encode()
+              %Protohacker.SpeedDaemon.Message.Error{message: "multiple heartbeat"}
+              |> Protohacker.SpeedDaemon.Message.encode()
 
             :gen_tcp.send(socket, msg_bytes)
             {:stop, {:normal, :multiple_heartbeat}, state}
@@ -91,6 +83,7 @@ defmodule Protohacker.SpeedDaemon.Connection do
         end
 
         Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
+        Logger.info("->> dispatcher is online")
 
         {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
          {:continue, :process_packet}}
@@ -107,8 +100,8 @@ defmodule Protohacker.SpeedDaemon.Connection do
 
         {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 
-      {:error, reason} ->
-        {:stop, reason, state}
+      :error ->
+        {:stop, {:shutdown, "decode error"}, state}
     end
   end
 
@@ -116,9 +109,8 @@ defmodule Protohacker.SpeedDaemon.Connection do
     if interval > 0 do
       :gen_tcp.send(
         socket,
-        Protohacker.SpeedDaemon.Message.Heartbeat.encode(
-          %Protohacker.SpeedDaemon.Message.Heartbeat{}
-        )
+        %Protohacker.SpeedDaemon.Message.Heartbeat{}
+        |> Protohacker.SpeedDaemon.Message.encode()
       )
 
       :timer.sleep(interval * 100)
