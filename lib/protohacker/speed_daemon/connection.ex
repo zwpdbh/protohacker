@@ -77,10 +77,10 @@ defmodule Protohacker.SpeedDaemon.Connection do
         if interval > 0 do
           {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
 
-          {:ok, %__MODULE__{state | heartbeat_ref: heartbeat_ref, buffer: remaining},
+          {:noreply, %__MODULE__{state | heartbeat_ref: heartbeat_ref, buffer: remaining},
            {:continue, :process_packet}}
         else
-          {:ok, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
+          {:noreply, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
            {:continue, :process_packet}}
         end
 
