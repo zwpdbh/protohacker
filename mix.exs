@@ -10,6 +10,9 @@ defmodule Protohacker.MixProject do
       deps: deps(),
       releases: releases(),
       config_path: "config/config.exs"
+      # aliases: [
+      #   test: ["test --trace"]
+      # ]
     ]
   end
 

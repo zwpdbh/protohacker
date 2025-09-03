@@ -29,7 +29,7 @@ defmodule Protohacker.MeansToEnd do
            exit_on_close: false
          ) do
       {:ok, listen_socket} ->
-        Logger.info("->> start means_to_end server at port: #{@port}")
+        Logger.info(" start means_to_end server at port: #{@port}")
         {:ok, %__MODULE__{listen_socket: listen_socket}, {:continue, :accept}}
 
       {:error, reason} ->
@@ -62,7 +62,7 @@ defmodule Protohacker.MeansToEnd do
                 handle_connection_loop(socket, records)
 
               {:error, reason} ->
-                Logger.error("->> #{__MODULE__} :gen_tcp.send error: #{inspect(reason)}")
+                Logger.error(" #{__MODULE__} :gen_tcp.send error: #{inspect(reason)}")
             end
 
           {:insert, timestamp, new_record} ->
@@ -75,7 +75,7 @@ defmodule Protohacker.MeansToEnd do
 
       {:error, reason} ->
         Logger.info(
-          "->> #{__MODULE__} handle_connection_loop :gen_tcp.recv error: #{inspect(reason)} "
+          " #{__MODULE__} handle_connection_loop :gen_tcp.recv error: #{inspect(reason)} "
         )
 
         :gen_tcp.close(socket)

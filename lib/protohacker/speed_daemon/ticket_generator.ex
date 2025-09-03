@@ -69,7 +69,7 @@ defmodule Protohacker.SpeedDaemon.TicketGenerator do
           else
             # too slow, just update the record
             Logger.debug(
-              "->> too slow, just update the record, speed_mph_float: #{speed_mph_float}, limit: #{limit}"
+              " too slow, just update the record, speed_mph_float: #{speed_mph_float}, limit: #{limit}"
             )
           end
 

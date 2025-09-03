@@ -65,7 +65,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
               Protohacker.SpeedDaemon.Message.encode(ticket)
             )
 
-            Logger.info("->> send_ticket, key: #{inspect(each_key)}, ticket: #{inspect(ticket)}")
+            Logger.info(" send_ticket, key: #{inspect(each_key)}, ticket: #{inspect(ticket)}")
             Map.put(send_records, each_key, 1)
 
           _ ->

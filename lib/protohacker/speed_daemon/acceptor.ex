@@ -20,18 +20,18 @@ defmodule Protohacker.SpeedDaemon.Acceptor do
 
     case :gen_tcp.listen(@port, listen_options) do
       {:ok, listen_socket} ->
-        Logger.info("->> start speed daemon server at port: #{@port}")
+        Logger.info(" start speed daemon server at port: #{@port}")
         accept_loop(listen_socket)
 
       {:error, reason} ->
-        raise "->> failed to listen on port: #{@port}, reason: #{inspect(reason)}"
+        raise " failed to listen on port: #{@port}, reason: #{inspect(reason)}"
     end
   end
 
   defp accept_loop(listen_socket) do
     case :gen_tcp.accept(listen_socket) do
       {:error, reason} ->
-        raise "->> faied to accept connection, reason: #{inspect(reason)}"
+        raise " faied to accept connection, reason: #{inspect(reason)}"
 
       {:ok, socket} ->
         Protohacker.SpeedDaemon.ConnectionSupervisor.start_child(socket)

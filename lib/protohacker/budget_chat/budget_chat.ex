@@ -36,7 +36,7 @@ defmodule Protohacker.BudgetChat do
 
     with {:ok, listen_socket} <- :gen_tcp.listen(@port, options),
          {:ok, sup} <- DynamicSupervisor.start_link(strategy: :one_for_one) do
-      Logger.info("->> start budget_chat server at port: #{@port}")
+      Logger.info(" start budget_chat server at port: #{@port}")
 
       state = %__MODULE__{
         listen_socket: listen_socket,

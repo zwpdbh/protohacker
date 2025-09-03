@@ -73,7 +73,7 @@ defmodule Protohacker.MobMiddle.Pair do
   defp handle_client_connection_loop(%__MODULE__{} = state) do
     case :gen_tcp.recv(state.client_socket, 0) do
       {:ok, message} ->
-        Logger.info("->> receive message from client: #{inspect(message)}")
+        Logger.info(" receive message from client: #{inspect(message)}")
 
         send(state.myself, {:from_client, message})
         handle_client_connection_loop(state)
@@ -86,7 +86,7 @@ defmodule Protohacker.MobMiddle.Pair do
   defp handle_budget_chat_connection_loop(%__MODULE__{} = state) do
     case :gen_tcp.recv(state.budget_chat_socket, 0) do
       {:ok, message} ->
-        Logger.info("->> receive message from budget-chat server: #{inspect(message)}")
+        Logger.info(" receive message from budget-chat server: #{inspect(message)}")
 
         send(state.myself, {:from_budget_chat, message})
         handle_budget_chat_connection_loop(state)

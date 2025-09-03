@@ -134,16 +134,14 @@ defmodule Protohacker.BudgetChat.UserConnection do
         {:stop, :normal, state}
 
       _ ->
-        Logger.debug("->> loop recv error: #{inspect(reason)}")
+        Logger.debug(" loop recv error: #{inspect(reason)}")
         {:noreply, state}
     end
   end
 
   @impl true
   def handle_info(msg, state) do
-    Logger.warning(
-      "->> unhandled msg: #{inspect(msg)}, for #{__MODULE__}, state: #{inspect(state)}"
-    )
+    Logger.warning(" unhandled msg: #{inspect(msg)}, for #{__MODULE__}, state: #{inspect(state)}")
 
     {:noreploy, state}
   end

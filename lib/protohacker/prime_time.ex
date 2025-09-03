@@ -30,7 +30,7 @@ defmodule Protohacker.PrimeTime do
       {:ok, listen_socket} ->
         # :inet.getopts(listen_socket, [:buffer]) |> dbg()
 
-        Logger.info("->> start prime_time server at: #{inspect(@port)}")
+        Logger.info(" start prime_time server at: #{inspect(@port)}")
         state = %__MODULE__{listen_socket: listen_socket, supervisor: sup}
 
         {:ok, state, {:continue, :accept}}
@@ -96,7 +96,7 @@ defmodule Protohacker.PrimeTime do
   end
 
   def validate_request(unknown) do
-    Logger.warning("->> #{__MODULE__} validate unknown request: #{inspect(unknown)}")
+    Logger.warning(" #{__MODULE__} validate unknown request: #{inspect(unknown)}")
     {:error, :malformed}
   end
 

@@ -12,13 +12,12 @@ defmodule Protohacker.SpeedDaemon.Connection do
     :buffer,
     :camera,
     :dispatcher,
-    :heartbeat_supervisor
+    :heartbeat_ref
   ]
 
   @impl true
   def init(socket) do
-    {:ok, sup} = Task.Supervisor.start_link(max_children: 1)
-    {:ok, %__MODULE__{role: nil, buffer: "", socket: socket, heartbeat_supervisor: sup}}
+    {:ok, %__MODULE__{role: nil, buffer: "", socket: socket}}
   end
 
   @impl true
@@ -42,35 +41,47 @@ defmodule Protohacker.SpeedDaemon.Connection do
 
   @impl true
   def handle_info({:tcp_error, socket, reason}, %__MODULE__{socket: socket} = state) do
-    {:stop, {:normal, reason}, state}
+    Logger.error(" Connection closed because of error: #{inspect(reason)}")
+    {:stop, :normal, state}
   end
 
   @impl true
   def handle_info({:tcp_closed, socket}, %__MODULE__{socket: socket} = state) do
-    {:stop, {:normal, :tcp_closed}, state}
+    {:stop, :normal, state}
+  end
+
+  def handle_info(:send_heartbeat, %__MODULE__{} = state) do
+    msg_packet =
+      %Protohacker.SpeedDaemon.Message.Heartbeat{} |> Protohacker.SpeedDaemon.Message.encode()
+
+    :gen_tcp.send(state.socket, msg_packet)
+    {:noreply, state}
   end
 
   @impl true
   def handle_continue(
         :process_packet,
-        %__MODULE__{socket: socket, buffer: buffer, heartbeat_supervisor: sup} = state
+        %__MODULE__{buffer: buffer} = state
       ) do
     case Protohacker.SpeedDaemon.Message.decode(buffer) do
       :incomplete ->
         {:noreply, %{state | buffer: buffer}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
-        case Task.Supervisor.start_child(sup, fn -> do_heartbeat(interval, socket) end) do
-          {:ok, _pid} ->
-            {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
+        interval_in_ms = interval * 10
 
-          {:error, :max_children} ->
-            msg_bytes =
-              %Protohacker.SpeedDaemon.Message.Error{message: "multiple heartbeat"}
-              |> Protohacker.SpeedDaemon.Message.encode()
+        if state.heartbeat_ref do
+          :timer.cancel(state.heartbeat_ref)
+        end
 
-            :gen_tcp.send(socket, msg_bytes)
-            {:stop, {:normal, :multiple_heartbeat}, state}
+        if interval > 0 do
+          {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
+
+          {:ok, %__MODULE__{state | heartbeat_ref: heartbeat_ref, buffer: remaining},
+           {:continue, :process_packet}}
+        else
+          {:ok, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
+           {:continue, :process_packet}}
         end
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
@@ -82,11 +93,11 @@ defmodule Protohacker.SpeedDaemon.Connection do
 
         for each_road <- dispatcher.roads do
           :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
-          Logger.info("->> subscribe topic: ticket_generated_road_#{each_road}")
+          Logger.info(" subscribe topic: ticket_generated_road_#{each_road}")
         end
 
         :ok = Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
-        Logger.info("->> let TicketManager know dispatcher is online")
+        Logger.info(" let TicketManager know dispatcher is online")
 
         {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
          {:continue, :process_packet}}
@@ -104,22 +115,7 @@ defmodule Protohacker.SpeedDaemon.Connection do
         {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 
       :error ->
-        {:stop, {:shutdown, "decode error"}, state}
-    end
-  end
-
-  defp do_heartbeat(interval, socket) do
-    if interval > 0 do
-      :gen_tcp.send(
-        socket,
-        %Protohacker.SpeedDaemon.Message.Heartbeat{}
-        |> Protohacker.SpeedDaemon.Message.encode()
-      )
-
-      :timer.sleep(interval * 100)
-      do_heartbeat(interval, socket)
-    else
-      :ok
+        {:stop, :normal, state}
     end
   end
 end

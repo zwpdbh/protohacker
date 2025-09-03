@@ -16,7 +16,7 @@ defmodule Protohacker.MobMiddleV2.Acceptor do
         accept_loop(listen_socket)
 
       {:error, reason} ->
-        raise "->> failed to listen on port #{Protohacker.MobMiddle.port()}, reason: #{inspect(reason)}"
+        raise " failed to listen on port #{Protohacker.MobMiddle.port()}, reason: #{inspect(reason)}"
     end
   end
 
@@ -27,7 +27,7 @@ defmodule Protohacker.MobMiddleV2.Acceptor do
         accept_loop(listen_socket)
 
       {:error, reason} ->
-        raise "->> failed to accept connection: #{inspect(reason)}"
+        raise " failed to accept connection: #{inspect(reason)}"
     end
   end
 end
