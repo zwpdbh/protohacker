@@ -77,8 +77,9 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
   end
 
   @impl true
-  def handle_cast(
+  def handle_call(
         {:dispatcher_is_online, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher},
+        _from,
         %__MODULE__{} = state
       ) do
     for {{_ticket_plate, _day} = key, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket} <-
@@ -90,7 +91,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
       end
     end
 
-    {:noreply, state}
+    {:reply, :ok, state}
   end
 
   # Where a ticket spans multiple days, the ticket is considered to apply to every day from the start to the end day,
@@ -115,6 +116,6 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
   end
 
   def dispatcher_is_online(%Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher) do
-    GenServer.cast(__MODULE__, {:dispatcher_is_online, dispatcher})
+    GenServer.call(__MODULE__, {:dispatcher_is_online, dispatcher})
   end
 end

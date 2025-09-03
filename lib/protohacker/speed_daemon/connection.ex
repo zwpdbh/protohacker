@@ -78,12 +78,15 @@ defmodule Protohacker.SpeedDaemon.Connection do
          {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
+        Logger.metadata(role: :dispatcher, info: "#{inspect(dispatcher)}")
+
         for each_road <- dispatcher.roads do
           :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
+          Logger.info("->> subscribe topic: ticket_generated_road_#{each_road}")
         end
 
-        Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
-        Logger.info("->> dispatcher is online")
+        :ok = Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
+        Logger.info("->> let TicketManager know dispatcher is online")
 
         {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
          {:continue, :process_packet}}
