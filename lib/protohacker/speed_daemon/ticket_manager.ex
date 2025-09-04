@@ -31,7 +31,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
     tickets = %{}
 
     # Store the tickets send record to make sure: only 1 ticket per car per day.
-    # key is ticket_id, value is ticket
+    # key is {ticket.plate, day(timestamp)}, value is ticket
     send_records = %{}
 
     {:ok,
@@ -40,30 +40,6 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
        tickets: tickets,
        send_records: send_records
      }}
-  end
-
-  @impl true
-  def handle_cast(
-        {:send_ticket, ticket_id, socket},
-        %__MODULE__{} = state
-      ) do
-    case Map.get(state.send_records, ticket_id, false) do
-      true ->
-        {:noreply, state}
-
-      false ->
-        ticket = Map.get(state.tickets, ticket_id)
-        ticket_packet = ticket |> Message.encode()
-
-        :gen_tcp.send(socket, ticket_packet)
-        Logger.debug("sent ticket: #{inspect(ticket)}")
-        updated_send_records = Map.put(state.send_records, ticket_id, true)
-
-        updated_tickets = Map.delete(state.tickets, ticket_id)
-
-        {:noreply,
-         %__MODULE__{state | send_records: updated_send_records, tickets: updated_tickets}}
-    end
   end
 
   @impl true
@@ -110,9 +86,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
           # second (or later) seen, calculate the speed
           distance_miles = abs(mile - prev_mile)
           time_seconds = abs(timestamp - prev_timestamp)
-
-          speed_mph_float = distance_miles / (time_seconds / 3600)
-          speed_mph = round(speed_mph_float)
+          speed_mph = round(distance_miles / (time_seconds / 3600))
 
           # mile1 and timestamp1 must refer to the earlier of the 2 observations (the smaller timestamp), and mile2 and timestamp2 must refer to the later of the 2 observations (the larger timestamp).
           {mile1, timestamp1, mile2, timestamp2} =
@@ -123,7 +97,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
             end
 
           # Ticket if exceeding limit by >=0.5 mph
-          if speed_mph_float >= limit + 0.5 do
+          if speed_mph > limit do
             ticket = %Protohacker.SpeedDaemon.Message.Ticket{
               plate: plate,
               road: road,
@@ -131,7 +105,6 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
               timestamp1: timestamp1,
               mile2: mile2,
               timestamp2: timestamp2,
-              # stored as integer (mph × 100)
               speed: speed_mph * 100
             }
 
@@ -142,6 +115,42 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
       end
 
     {:noreply, %{state | previous_plate_event: updated_previous_plate_event}}
+  end
+
+  @impl true
+  def handle_cast(
+        {:send_ticket, ticket_id, socket},
+        %__MODULE__{} = state
+      ) do
+    %Message.Ticket{} = ticket = Map.get(state.tickets, ticket_id)
+    ticket_start_day = day(ticket.timestamp1)
+    ticket_end_day = day(ticket.timestamp2)
+
+    ticket_send_record_for_start_day =
+      Map.get(state.send_records, {ticket.plate, ticket_start_day}, false)
+
+    ticket_send_record_for_end_day =
+      Map.get(state.send_records, {ticket.plate, ticket_end_day}, false)
+
+    case {ticket_send_record_for_start_day, ticket_send_record_for_end_day} do
+      {false, false} ->
+        ticket_packet = ticket |> Message.encode()
+
+        :gen_tcp.send(socket, ticket_packet)
+        Logger.debug("sent ticket: #{inspect(ticket)}")
+
+        updated_send_records =
+          Map.put(state.send_records, {ticket.plate, ticket_send_record_for_start_day}, true)
+          |> Map.put({ticket.plate, ticket_send_record_for_end_day}, true)
+
+        updated_tickets = Map.delete(state.tickets, ticket_id)
+
+        {:noreply,
+         %__MODULE__{state | send_records: updated_send_records, tickets: updated_tickets}}
+
+      {_, _} ->
+        {:noreply, state}
+    end
   end
 
   @impl true
