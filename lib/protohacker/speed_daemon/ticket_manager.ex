@@ -67,9 +67,8 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
   end
 
   @impl true
-  def handle_call(
+  def handle_cast(
         {:dispatcher_is_online, %Message.IAmDispatcher{} = dispatcher},
-        _from,
         %__MODULE__{} = state
       ) do
     for {ticket_id, %Message.Ticket{} = ticket} <- state.tickets do
@@ -83,18 +82,16 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
       end
     end
 
-    {:reply, :ok, state}
+    {:noreply, state}
   end
 
   @doc """
   compute if the same plate have exceed the limit by compute its recent two event: {mile, timestamp}
   """
   @impl true
-  def handle_call(
+  def handle_cast(
         {:plate_event,
-         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road}} =
-          plate_event,
-        _from,
+         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road}},
         %__MODULE__{} = state
       ) do
     key = plate
@@ -139,17 +136,12 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
             }
 
             send(self(), {:save_ticket, ticket})
-          else
-            # too slow, just update the record
-            Logger.debug(
-              " too slow, just update the record, plate_event: #{inspect(plate_event)}"
-            )
           end
 
-          Map.put(state.previous_plate_event, key, {mile, timestamp})
+          Map.put(state.previous_plate_event, key, {mile2, timestamp2})
       end
 
-    {:reply, :ok, %{state | previous_plate_event: updated_previous_plate_event}}
+    {:noreply, %{state | previous_plate_event: updated_previous_plate_event}}
   end
 
   @impl true
@@ -180,10 +172,10 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
   end
 
   def dispatcher_is_online(%Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher) do
-    GenServer.call(__MODULE__, {:dispatcher_is_online, dispatcher})
+    GenServer.cast(__MODULE__, {:dispatcher_is_online, dispatcher})
   end
 
   def record_plate(plate_event) do
-    GenServer.call(__MODULE__, {:plate_event, plate_event})
+    GenServer.cast(__MODULE__, {:plate_event, plate_event})
   end
 end

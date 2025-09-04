@@ -70,27 +70,15 @@ defmodule Protohacker.SpeedDaemon.Connection do
       {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
         interval_in_ms = interval * 100
 
-        case {interval, state.heartbeat_ref} do
-          {0, nil} ->
-            {:noreply, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
-             {:continue, :process_packet}}
+        if state.heartbeat_ref do
+          :timer.cancel(state.heartbeat_ref)
+        end
 
-          {0, _heartbeat_ref} ->
-            :timer.cancel(state.heartbeat_ref)
-
-            {:noreply, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
-             {:continue, :process_packet}}
-
-          {n, heartbeat_ref} when n > 0 and not is_nil(heartbeat_ref) ->
-            Logger.warning("repeated heartbeat request")
-            :timer.cancel(state.heartbeat_ref)
-            {:stop, :normal, state}
-
-          {n, nil} when n > 0 ->
-            {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
-
-            {:noreply, %__MODULE__{state | heartbeat_ref: heartbeat_ref, buffer: remaining},
-             {:continue, :process_packet}}
+        if interval > 0 do
+          {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
+          {:noreply, %{state | heartbeat_ref: heartbeat_ref, buffer: remaining}}
+        else
+          {:noreply, %{state | buffer: remaining}}
         end
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
@@ -107,21 +95,20 @@ defmodule Protohacker.SpeedDaemon.Connection do
           Logger.debug("subscribe topic: ticket_generated_road_#{each_road}")
         end
 
-        :ok = Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
+        Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
         Logger.debug("let TicketManager know dispatcher is online")
 
         {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
          {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
-        :ok =
-          Protohacker.SpeedDaemon.TicketManager.record_plate(%{
-            plate: plate.plate,
-            timestamp: plate.timestamp,
-            road: state.camera.road,
-            mile: state.camera.mile,
-            limit: state.camera.limit
-          })
+        Protohacker.SpeedDaemon.TicketManager.record_plate(%{
+          plate: plate.plate,
+          timestamp: plate.timestamp,
+          road: state.camera.road,
+          mile: state.camera.mile,
+          limit: state.camera.limit
+        })
 
         Logger.debug("recorded plate: #{inspect(plate)}, on camera: #{inspect(state.camera)}")
 
