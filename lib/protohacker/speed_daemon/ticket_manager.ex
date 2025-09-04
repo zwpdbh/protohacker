@@ -52,9 +52,11 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
         {:noreply, state}
 
       false ->
-        ticket_packet = Map.get(state.tickets, ticket_id) |> Message.encode()
+        ticket = Map.get(state.tickets, ticket_id)
+        ticket_packet = ticket |> Message.encode()
 
         :gen_tcp.send(socket, ticket_packet)
+        Logger.info("sent ticket: #{inspect(ticket)}")
         updated_send_records = Map.put(state.send_records, ticket_id, true)
 
         updated_tickets = Map.delete(state.tickets, ticket_id)
@@ -115,15 +117,23 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
           speed_mph_float = distance_miles / (time_seconds / 3600)
           speed_mph = round(speed_mph_float)
 
+          # mile1 and timestamp1 must refer to the earlier of the 2 observations (the smaller timestamp), and mile2 and timestamp2 must refer to the later of the 2 observations (the larger timestamp).
+          {mile1, timestamp1, mile2, timestamp2} =
+            if prev_timestamp < timestamp do
+              {prev_mile, prev_timestamp, mile, timestamp}
+            else
+              {mile, timestamp, prev_mile, prev_timestamp}
+            end
+
           # Ticket if exceeding limit by >=0.5 mph
           if speed_mph_float >= limit + 0.5 do
             ticket = %Protohacker.SpeedDaemon.Message.Ticket{
               plate: plate,
               road: road,
-              mile1: min(mile, prev_mile),
-              timestamp1: min(timestamp, prev_timestamp),
-              mile2: max(mile, prev_mile),
-              timestamp2: max(timestamp, prev_timestamp),
+              mile1: mile1,
+              timestamp1: timestamp1,
+              mile2: mile2,
+              timestamp2: timestamp2,
               # stored as integer (mph × 100)
               speed: speed_mph * 100
             }
