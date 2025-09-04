@@ -7,4 +7,4 @@ config :protohacker,
   budget_chat_server_port: 3007
 
 config :logger,
-  level: :debug
+  level: :warning

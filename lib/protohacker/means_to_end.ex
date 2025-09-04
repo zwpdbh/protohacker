@@ -29,7 +29,7 @@ defmodule Protohacker.MeansToEnd do
            exit_on_close: false
          ) do
       {:ok, listen_socket} ->
-        Logger.info(" start means_to_end server at port: #{@port}")
+        Logger.debug(" start means_to_end server at port: #{@port}")
         {:ok, %__MODULE__{listen_socket: listen_socket}, {:continue, :accept}}
 
       {:error, reason} ->

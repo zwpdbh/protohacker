@@ -56,7 +56,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
         ticket_packet = ticket |> Message.encode()
 
         :gen_tcp.send(socket, ticket_packet)
-        Logger.info("sent ticket: #{inspect(ticket)}")
+        Logger.debug("sent ticket: #{inspect(ticket)}")
         updated_send_records = Map.put(state.send_records, ticket_id, true)
 
         updated_tickets = Map.delete(state.tickets, ticket_id)
@@ -141,7 +141,9 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
             send(self(), {:save_ticket, ticket})
           else
             # too slow, just update the record
-            Logger.info(" too slow, just update the record, plate_event: #{inspect(plate_event)}")
+            Logger.debug(
+              " too slow, just update the record, plate_event: #{inspect(plate_event)}"
+            )
           end
 
           Map.put(state.previous_plate_event, key, {mile, timestamp})

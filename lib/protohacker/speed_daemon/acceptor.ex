@@ -20,7 +20,7 @@ defmodule Protohacker.SpeedDaemon.Acceptor do
 
     case :gen_tcp.listen(@port, listen_options) do
       {:ok, listen_socket} ->
-        Logger.info(" start speed daemon server at port: #{@port}")
+        Logger.debug(" start speed daemon server at port: #{@port}")
         accept_loop(listen_socket)
 
       {:error, reason} ->

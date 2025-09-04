@@ -94,21 +94,21 @@ defmodule Protohacker.SpeedDaemon.Connection do
         end
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
-        Logger.info("i am camera: #{inspect(state.socket)}")
+        Logger.debug("i am camera: #{inspect(state.socket)}")
 
         {:noreply, %{state | buffer: remaining, role: :camera, camera: camera},
          {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-        Logger.info("i am dispatcher: #{inspect(state.socket)}")
+        Logger.debug("i am dispatcher: #{inspect(state.socket)}")
 
         for each_road <- dispatcher.roads do
           :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
-          Logger.info("subscribe topic: ticket_generated_road_#{each_road}")
+          Logger.debug("subscribe topic: ticket_generated_road_#{each_road}")
         end
 
         :ok = Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
-        Logger.info("let TicketManager know dispatcher is online")
+        Logger.debug("let TicketManager know dispatcher is online")
 
         {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
          {:continue, :process_packet}}
@@ -123,7 +123,7 @@ defmodule Protohacker.SpeedDaemon.Connection do
             limit: state.camera.limit
           })
 
-        Logger.info("recorded plate: #{inspect(plate)}, on camera: #{inspect(state.camera)}")
+        Logger.debug("recorded plate: #{inspect(plate)}, on camera: #{inspect(state.camera)}")
 
         {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 

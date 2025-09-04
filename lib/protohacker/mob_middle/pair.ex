@@ -73,7 +73,7 @@ defmodule Protohacker.MobMiddle.Pair do
   defp handle_client_connection_loop(%__MODULE__{} = state) do
     case :gen_tcp.recv(state.client_socket, 0) do
       {:ok, message} ->
-        Logger.info(" receive message from client: #{inspect(message)}")
+        Logger.debug(" receive message from client: #{inspect(message)}")
 
         send(state.myself, {:from_client, message})
         handle_client_connection_loop(state)

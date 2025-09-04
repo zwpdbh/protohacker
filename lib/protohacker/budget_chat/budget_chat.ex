@@ -36,7 +36,7 @@ defmodule Protohacker.BudgetChat do
 
     with {:ok, listen_socket} <- :gen_tcp.listen(@port, options),
          {:ok, sup} <- DynamicSupervisor.start_link(strategy: :one_for_one) do
-      Logger.info(" start budget_chat server at port: #{@port}")
+      Logger.debug(" start budget_chat server at port: #{@port}")
 
       state = %__MODULE__{
         listen_socket: listen_socket,
@@ -84,7 +84,7 @@ defmodule Protohacker.BudgetChat do
 
   @impl true
   def terminate(_reason, %__MODULE__{listen_socket: listen_socket} = _state) do
-    Logger.info("Shutting down BudgetChat server and closing listen socket")
+    Logger.debug("Shutting down BudgetChat server and closing listen socket")
 
     if listen_socket do
       :gen_tcp.close(listen_socket)

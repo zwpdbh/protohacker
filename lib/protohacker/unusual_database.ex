@@ -17,7 +17,7 @@ defmodule Protohacker.UnusualDatabase do
 
   @impl true
   def init(:no_state) do
-    Logger.info(" start unusual-database server at port: #{@port}")
+    Logger.debug(" start unusual-database server at port: #{@port}")
 
     options = [
       mode: :binary,
