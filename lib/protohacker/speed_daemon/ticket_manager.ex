@@ -18,7 +18,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
   ]
 
   defp ticket_id(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket) do
-    "#{ticket.plate}#{ticket.road}#{day(ticket.timestamp1)}"
+    "#{ticket.plate}#{day(ticket.timestamp1)}"
   end
 
   @impl true
