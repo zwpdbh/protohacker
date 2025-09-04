@@ -18,7 +18,7 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
   ]
 
   defp ticket_id(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket) do
-    "#{ticket.plate}#{day(ticket.timestamp1)}"
+    "#{ticket.plate}#{ticket.road}#{ticket.timestamp1}#{ticket.timestamp2}"
   end
 
   @impl true
@@ -136,14 +136,17 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
       {false, false} ->
         ticket_packet = ticket |> Message.encode()
 
-        :gen_tcp.send(socket, ticket_packet)
-        Logger.debug("sent ticket: #{inspect(ticket)}")
-
         updated_send_records =
-          Map.put(state.send_records, {ticket.plate, ticket_send_record_for_start_day}, true)
-          |> Map.put({ticket.plate, ticket_send_record_for_end_day}, true)
+          Map.put(state.send_records, {ticket.plate, ticket_start_day}, true)
+          |> Map.put({ticket.plate, ticket_end_day}, true)
 
         updated_tickets = Map.delete(state.tickets, ticket_id)
+
+        :gen_tcp.send(socket, ticket_packet)
+
+        Logger.info(
+          "sent ticket: #{inspect(ticket)}, ticket_start_day: #{ticket_start_day}, ticket_end_day: #{ticket_end_day}"
+        )
 
         {:noreply,
          %__MODULE__{state | send_records: updated_send_records, tickets: updated_tickets}}
