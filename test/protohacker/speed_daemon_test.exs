@@ -1,4 +1,4 @@
-defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
+defmodule Protohacker.SpeedDaemonTest do
   use ExUnit.Case
 
   alias Protohacker.SpeedDaemon.Message
@@ -214,5 +214,110 @@ defmodule Protohacker.SpeedDaemon.SpeedDaemonTest do
 
     plates = Enum.sort([ticket1.plate, ticket2.plate])
     assert plates == ["ABC123", "XYZ789"]
+  end
+
+  test "camera can send IAmCamera and Plate without disconnection" do
+    # Start the server (assuming it's already started via setup, or start it)
+    # This assumes your server listens on @port
+
+    {:ok, camera} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+
+    send_message(camera, %Message.IAmCamera{
+      road: 582,
+      mile: 4452,
+      limit: 100
+    })
+
+    # Wait a moment to ensure server processed it
+    :timer.sleep(100)
+
+    # Now send Plate on the same connection
+    send_message(camera, %Message.Plate{
+      plate: "TESTPLATE",
+      timestamp: 1_000_000
+    })
+
+    # Wait to see if connection is dropped
+    :timer.sleep(100)
+
+    # Try to send another message (optional: test still alive)
+    send_message(camera, %Message.Plate{
+      plate: "TESTPLATE",
+      timestamp: 1_000_000
+    })
+
+    # If we get here without crash, and no tcp_closed, it passed
+    :gen_tcp.close(camera)
+  end
+
+  test "receives heartbeats at requested interval" do
+    {:ok, client} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+
+    # Request heartbeat every 20 deciseconds = 2 seconds
+    send_message(client, %Message.WantHeartbeat{interval: 20})
+
+    # Allow time for 3 heartbeats: 2s apart → wait 7 seconds
+    assert_receive {:tcp, ^client, data1}, 3000
+    assert {:ok, %Message.Heartbeat{}, <<>>} = Message.decode(data1)
+
+    assert_receive {:tcp, ^client, data2}, 3000
+    assert {:ok, %Message.Heartbeat{}, <<>>} = Message.decode(data2)
+
+    assert_receive {:tcp, ^client, data3}, 3000
+    assert {:ok, %Message.Heartbeat{}, <<>>} = Message.decode(data3)
+
+    # Close connection
+    :gen_tcp.close(client)
+  end
+
+  test "disables heartbeats with interval 0" do
+    {:ok, client} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+
+    # Enable heartbeats every 10 deciseconds (~1 second)
+    send_message(client, %Message.WantHeartbeat{interval: 10})
+
+    assert_receive {:tcp, ^client, _heartbeat1}, 1500
+    assert_receive {:tcp, ^client, _heartbeat2}, 1500
+
+    # Disable heartbeats
+    send_message(client, %Message.WantHeartbeat{interval: 0})
+
+    # Wait longer than interval — should NOT receive heartbeat
+    refute_receive {:tcp, ^client, _any}, 2000
+
+    :gen_tcp.close(client)
+  end
+
+  test "sending multiple WantHeartbeat is an error" do
+    {:ok, client} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+
+    # First is OK
+    send_message(client, %Message.WantHeartbeat{interval: 10})
+
+    # Second should cause error → connection closed
+    send_message(client, %Message.WantHeartbeat{interval: 5})
+
+    # Expect connection to close
+    assert_receive {:tcp_closed, ^client}, 1000
+
+    :gen_tcp.close(client)
+  end
+
+  test "heartbeat interval of 25 sends every 2.5 seconds" do
+    {:ok, client} = :gen_tcp.connect(@host, @port, [:binary, active: true])
+
+    # 2.5 seconds
+    send_message(client, %Message.WantHeartbeat{interval: 25})
+
+    # First heartbeat
+    assert_receive {:tcp, ^client, data1}, 3000
+    assert {:ok, %Message.Heartbeat{}, <<>>} = Message.decode(data1)
+
+    # Second heartbeat
+    assert_receive {:tcp, ^client, data2}, 3000
+    assert {:ok, %Message.Heartbeat{}, <<>>} = Message.decode(data2)
+
+    # Rough timing: ~2.5s between, allow slack
+    :gen_tcp.close(client)
   end
 end

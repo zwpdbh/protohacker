@@ -1,6 +1,11 @@
 defmodule Protohacker.SpeedDaemon.TicketManager do
   require Logger
   use GenServer
+  alias Protohacker.SpeedDaemon.Message
+
+  defp day(timestamp) do
+    div(timestamp, 86400)
+  end
 
   def start_link([] = _opts) do
     GenServer.start_link(__MODULE__, :no_state, name: __MODULE__)
@@ -8,115 +13,165 @@ defmodule Protohacker.SpeedDaemon.TicketManager do
 
   defstruct [
     :tickets,
-    :send_record
+    :send_records,
+    :previous_plate_event
   ]
+
+  defp ticket_id(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket) do
+    "#{ticket.plate}#{ticket.road}#{day(ticket.timestamp1)}#{day(ticket.timestamp2)}"
+  end
 
   @impl true
   def init(:no_state) do
-    # key is {ticket.plate, day}, value is ticket
+    # Record previous plate event from camera.
+    previous_plate_event = %{}
+
+    # Store the pending tickets to send,
+    # key is ticket_id, value is ticket.
     tickets = %{}
 
-    # key is {ticket.plate, day}, value is integer represent the count of number ticket has been sent to client.
+    # Store the tickets send record to make sure: only 1 ticket per car per day.
+    # key is ticket_id, value is ticket
     send_records = %{}
-    {:ok, %__MODULE__{tickets: tickets, send_record: send_records}}
+
+    {:ok,
+     %__MODULE__{
+       previous_plate_event: previous_plate_event,
+       tickets: tickets,
+       send_records: send_records
+     }}
   end
 
   @impl true
   def handle_cast(
-        {:save_ticket, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket},
+        {:send_ticket, ticket_id, socket},
         %__MODULE__{} = state
       ) do
-    keys = generate_keys_from_ticket(ticket)
+    case Map.get(state.send_records, ticket_id, false) do
+      true ->
+        {:noreply, state}
 
-    udpated_tickets =
-      keys
-      |> Enum.map(fn each_key -> {each_key, ticket} end)
-      |> Enum.into(state.tickets)
+      false ->
+        ticket_packet = Map.get(state.tickets, ticket_id) |> Message.encode()
 
-    updated_send_record =
-      keys
-      |> Enum.reduce(state.send_record, fn each_key, send_records ->
-        case Map.get(send_records, each_key) do
-          nil ->
-            Map.put(send_records, each_key, 0)
+        :gen_tcp.send(socket, ticket_packet)
+        updated_send_records = Map.put(state.send_records, ticket_id, true)
 
-          _ ->
-            send_records
-        end
-      end)
+        updated_tickets = Map.delete(state.tickets, ticket_id)
 
-    {:noreply, %{state | tickets: udpated_tickets, send_record: updated_send_record}}
-  end
-
-  @impl true
-  def handle_cast(
-        {:send_ticket, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket, socket},
-        %__MODULE__{} = state
-      ) do
-    keys = generate_keys_from_ticket(ticket)
-
-    updated_send_record =
-      keys
-      |> Enum.reduce(state.send_record, fn each_key, send_records ->
-        case Map.get(send_records, each_key) do
-          0 ->
-            :gen_tcp.send(
-              socket,
-              Protohacker.SpeedDaemon.Message.encode(ticket)
-            )
-
-            Logger.info(" send_ticket, key: #{inspect(each_key)}, ticket: #{inspect(ticket)}")
-            Map.put(send_records, each_key, 1)
-
-          _ ->
-            Logger.warning("same ticket has already been sent")
-            send_records
-        end
-      end)
-
-    {:noreply, %{state | send_record: updated_send_record}}
+        {:noreply,
+         %__MODULE__{state | send_records: updated_send_records, tickets: updated_tickets}}
+    end
   end
 
   @impl true
   def handle_call(
-        {:dispatcher_is_online, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher},
+        {:dispatcher_is_online, %Message.IAmDispatcher{} = dispatcher},
         _from,
         %__MODULE__{} = state
       ) do
-    for {{_ticket_plate, _day} = key, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket} <-
-          state.tickets do
-      with true <- ticket.road in dispatcher.roads,
-           0 <- Map.get(state.send_record, key) do
+    for {ticket_id, %Message.Ticket{} = ticket} <- state.tickets do
+      if ticket.road in dispatcher.roads do
         :ok =
-          Phoenix.PubSub.broadcast!(:speed_daemon, "ticket_generated_road_#{ticket.road}", ticket)
+          Phoenix.PubSub.broadcast!(
+            :speed_daemon,
+            "ticket_generated_road_#{ticket.road}",
+            {:ticket_available, ticket_id}
+          )
       end
     end
 
     {:reply, :ok, state}
   end
 
-  # Where a ticket spans multiple days, the ticket is considered to apply to every day from the start to the end day,
-  # including the end day. This means that where there is a choice of observations to include in a ticket, \
-  # it is sometimes possible for the server to choose either to send a ticket for each day, or to send a single
-  # ticket that spans both days: either behaviour is acceptable. (But to maximise revenues, you may prefer to send as many tickets as possible).
-  defp generate_keys_from_ticket(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket) do
-    n = 86400
-    day1 = div(ticket.timestamp1, n)
-    day2 = div(ticket.timestamp2, n)
+  @doc """
+  compute if the same plate have exceed the limit by compute its recent two event: {mile, timestamp}
+  """
+  @impl true
+  def handle_call(
+        {:plate_event,
+         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road}} =
+          plate_event,
+        _from,
+        %__MODULE__{} = state
+      ) do
+    key = plate
 
-    day1..day2
-    |> Enum.map(fn each_day -> {ticket.plate, each_day} end)
+    updated_previous_plate_event =
+      case Map.get(state.previous_plate_event, key) do
+        nil ->
+          # first see that plate, record it
+          Map.put(state.previous_plate_event, key, {mile, timestamp})
+
+        {prev_mile, prev_timestamp} when mile == prev_mile and timestamp == prev_timestamp ->
+          Logger.warning("exact same mile and timestamp recorded")
+          Map.put(state.previous_plate_event, key, {mile, timestamp})
+
+        {prev_mile, prev_timestamp} ->
+          # second (or later) seen, calculate the speed
+          distance_miles = abs(mile - prev_mile)
+          time_seconds = abs(timestamp - prev_timestamp)
+
+          speed_mph_float = distance_miles / (time_seconds / 3600)
+          speed_mph = round(speed_mph_float)
+
+          # Ticket if exceeding limit by >=0.5 mph
+          if speed_mph_float >= limit + 0.5 do
+            ticket = %Protohacker.SpeedDaemon.Message.Ticket{
+              plate: plate,
+              road: road,
+              mile1: min(mile, prev_mile),
+              timestamp1: min(timestamp, prev_timestamp),
+              mile2: max(mile, prev_mile),
+              timestamp2: max(timestamp, prev_timestamp),
+              # stored as integer (mph × 100)
+              speed: speed_mph * 100
+            }
+
+            send(self(), {:save_ticket, ticket})
+          else
+            # too slow, just update the record
+            Logger.info(" too slow, just update the record, plate_event: #{inspect(plate_event)}")
+          end
+
+          Map.put(state.previous_plate_event, key, {mile, timestamp})
+      end
+
+    {:reply, :ok, %{state | previous_plate_event: updated_previous_plate_event}}
+  end
+
+  @impl true
+  def handle_info(
+        {:save_ticket, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket},
+        %__MODULE__{} = state
+      ) do
+    ticket_id = ticket_id(ticket)
+    updated_tickets = Map.put(state.tickets, ticket_id, ticket)
+
+    # Notifice dispatcher that
+    :ok =
+      Phoenix.PubSub.broadcast!(
+        :speed_daemon,
+        "ticket_generated_road_#{ticket.road}",
+        {:ticket_available, ticket_id}
+      )
+
+    {:noreply, %{state | tickets: updated_tickets}}
   end
 
   def save_ticket(ticket) do
     GenServer.cast(__MODULE__, {:save_ticket, ticket})
   end
 
-  def send_ticket_to_socket(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket, socket) do
-    GenServer.cast(__MODULE__, {:send_ticket, ticket, socket})
+  def send_ticket_to_socket(ticket_id, socket) do
+    GenServer.cast(__MODULE__, {:send_ticket, ticket_id, socket})
   end
 
   def dispatcher_is_online(%Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher) do
     GenServer.call(__MODULE__, {:dispatcher_is_online, dispatcher})
+  end
+
+  def record_plate(plate_event) do
+    GenServer.call(__MODULE__, {:plate_event, plate_event})
   end
 end

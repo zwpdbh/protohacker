@@ -33,7 +33,7 @@ defmodule Protohacker.SpeedDaemon.Message do
 
   ## Functions
 
-  @type_bytes [0x20, 0x40, 0x80, 0x01, 0x02, 0x04, 0x08]
+  @type_bytes [0x20, 0x40, 0x80, 0x81]
 
   ## Decoding
 
@@ -89,12 +89,12 @@ defmodule Protohacker.SpeedDaemon.Message do
     :incomplete
   end
 
-  def decode(<<_byte, _rest::binary>>) do
-    :error
-  end
-
   def decode(<<>>) do
     :incomplete
+  end
+
+  def decode(<<_byte, _rest::binary>>) do
+    :error
   end
 
   ## Encoding
@@ -129,5 +129,9 @@ defmodule Protohacker.SpeedDaemon.Message do
   def encode(%Ticket{} = ticket) do
     <<0x21, byte_size(ticket.plate), ticket.plate::binary, ticket.road::16, ticket.mile1::16,
       ticket.timestamp1::32, ticket.mile2::16, ticket.timestamp2::32, ticket.speed::16>>
+  end
+
+  def encode(other) do
+    raise "unknow packet: #{inspect(other)}"
   end
 end

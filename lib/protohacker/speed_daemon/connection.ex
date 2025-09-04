@@ -32,10 +32,10 @@ defmodule Protohacker.SpeedDaemon.Connection do
   # Handle event from subscrition for generated ticket
   @impl true
   def handle_info(
-        %Protohacker.SpeedDaemon.Message.Ticket{} = ticket,
+        {:ticket_available, ticket_id},
         %__MODULE__{role: :dispatcher, socket: socket} = state
       ) do
-    Protohacker.SpeedDaemon.TicketManager.send_ticket_to_socket(ticket, socket)
+    Protohacker.SpeedDaemon.TicketManager.send_ticket_to_socket(ticket_id, socket)
     {:noreply, state}
   end
 
@@ -68,43 +68,54 @@ defmodule Protohacker.SpeedDaemon.Connection do
         {:noreply, %{state | buffer: buffer}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
-        interval_in_ms = interval * 10
+        interval_in_ms = interval * 100
 
-        if state.heartbeat_ref do
-          :timer.cancel(state.heartbeat_ref)
-        end
+        case {interval, state.heartbeat_ref} do
+          {0, nil} ->
+            {:noreply, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
+             {:continue, :process_packet}}
 
-        if interval > 0 do
-          {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
+          {0, _heartbeat_ref} ->
+            :timer.cancel(state.heartbeat_ref)
 
-          {:noreply, %__MODULE__{state | heartbeat_ref: heartbeat_ref, buffer: remaining},
-           {:continue, :process_packet}}
-        else
-          {:noreply, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
-           {:continue, :process_packet}}
+            {:noreply, %__MODULE__{state | heartbeat_ref: nil, buffer: remaining},
+             {:continue, :process_packet}}
+
+          {n, heartbeat_ref} when n > 0 and not is_nil(heartbeat_ref) ->
+            Logger.warning("repeated heartbeat request")
+            :timer.cancel(state.heartbeat_ref)
+            {:stop, :normal, state}
+
+          {n, nil} when n > 0 ->
+            {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
+
+            {:noreply, %__MODULE__{state | heartbeat_ref: heartbeat_ref, buffer: remaining},
+             {:continue, :process_packet}}
         end
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
+        Logger.info("i am camera: #{inspect(state.socket)}")
+
         {:noreply, %{state | buffer: remaining, role: :camera, camera: camera},
          {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-        Logger.metadata(role: :dispatcher, info: "#{inspect(dispatcher)}")
+        Logger.info("i am dispatcher: #{inspect(state.socket)}")
 
         for each_road <- dispatcher.roads do
           :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
-          Logger.info(" subscribe topic: ticket_generated_road_#{each_road}")
+          Logger.info("subscribe topic: ticket_generated_road_#{each_road}")
         end
 
         :ok = Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
-        Logger.info(" let TicketManager know dispatcher is online")
+        Logger.info("let TicketManager know dispatcher is online")
 
         {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
          {:continue, :process_packet}}
 
       {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
         :ok =
-          Protohacker.SpeedDaemon.TicketGenerator.record_plate(%{
+          Protohacker.SpeedDaemon.TicketManager.record_plate(%{
             plate: plate.plate,
             timestamp: plate.timestamp,
             road: state.camera.road,
@@ -112,9 +123,15 @@ defmodule Protohacker.SpeedDaemon.Connection do
             limit: state.camera.limit
           })
 
+        Logger.info("recorded plate: #{inspect(plate)}, on camera: #{inspect(state.camera)}")
+
         {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
 
       :error ->
+        Logger.error(
+          "error when decode buffer: #{inspect(buffer)}, current_state: #{inspect(state)}"
+        )
+
         {:stop, :normal, state}
     end
   end
