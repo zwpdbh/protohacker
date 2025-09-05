@@ -22,7 +22,7 @@ defmodule Protohacker.EchoServer do
 
     case(:gen_tcp.listen(@port, listen_options)) do
       {:ok, listen_socket} ->
-        Logger.info("->> start echo server at: #{inspect(@port)}")
+        Logger.debug(" start echo server at: #{inspect(@port)}")
 
         state = %__MODULE__{listen_socket: listen_socket}
         {:ok, state, {:continue, :accept}}
@@ -59,7 +59,7 @@ defmodule Protohacker.EchoServer do
         :ok
 
       {:error, reason} ->
-        Logger.warning("->> recv failed: #{inspect(reason)}")
+        Logger.warning(" recv failed: #{inspect(reason)}")
         :error
     end
   end

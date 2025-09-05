@@ -17,7 +17,7 @@ defmodule Protohacker.UnusualDatabase do
 
   @impl true
   def init(:no_state) do
-    Logger.info("->> start unusual-database server at port: #{@port}")
+    Logger.debug(" start unusual-database server at port: #{@port}")
 
     options = [
       mode: :binary,
@@ -48,16 +48,16 @@ defmodule Protohacker.UnusualDatabase do
         state =
           case String.split(packet, "=", parts: 2) do
             ["version", _] ->
-              Logger.debug("->> ignore update version from client")
+              Logger.debug(" ignore update version from client")
               state
 
             [key, value] ->
-              Logger.debug("->> insert key: #{inspect(key)}, value: #{inspect(value)}")
+              Logger.debug(" insert key: #{inspect(key)}, value: #{inspect(value)}")
 
               put_in(state.store[key], value)
 
             [key] ->
-              Logger.debug("->> requested key: #{inspect(key)}")
+              Logger.debug(" requested key: #{inspect(key)}")
               packet = "#{key}=#{state.store[key]}"
 
               :gen_udp.send(state.socket, address, port, packet)
