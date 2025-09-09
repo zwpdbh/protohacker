@@ -1,4 +1,4 @@
-defmodule Protohacker.SpeedDaemon.ConnectionSupervisor do
+defmodule Protohacker.LineReversal.ConnectionSupervisor do
   use DynamicSupervisor
 
   def start_link([] = _opts) do
@@ -11,10 +11,10 @@ defmodule Protohacker.SpeedDaemon.ConnectionSupervisor do
   end
 
   def start_child(socket) do
-    child_spec = {Protohacker.SpeedDaemon.Connection, socket}
+    child_spec = {Protohacker.LineReversal.Connection, socket}
 
-    with {:ok, conn} <- DynamicSupervisor.start_child(__MODULE__, child_spec),
-         :ok <- :gen_tcp.controlling_process(socket, conn) do
+    # TODO: use the conn and socket do controlling_process?...
+    with {:ok, conn} <- DynamicSupervisor.start_child(__MODULE__, child_spec) do
       {:ok, conn}
     end
   end
