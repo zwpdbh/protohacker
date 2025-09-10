@@ -2,7 +2,7 @@ defmodule Protohacker.LineReversal.Acceptor do
   require Logger
   use Task, restart: :transient
 
-  @port 5006
+  # @port 5006
 
   def start_link([] = _opts) do
     Task.start_link(__MODULE__, :run, [:no_args])
