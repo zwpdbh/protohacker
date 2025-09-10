@@ -7,7 +7,9 @@ defmodule Protohacker.LineReversal.Supervisor do
 
   @impl true
   def init(:no_args) do
-    children = []
+    children = [
+      {Registry, name: Protohacker.LineReversal.Registry, keys: :unique}
+    ]
 
     Supervisor.init(children, strategy: :rest_for_one)
   end

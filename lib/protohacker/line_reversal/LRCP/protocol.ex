@@ -77,6 +77,14 @@ defmodule Protohacker.LineReversal.LRCP.Protocol do
     :error
   end
 
+  # ------------------------
+  # session id
+  # ------------------------
+  def session_id({:connect, session_id}), do: session_id
+  def session_id({:close, session_id}), do: session_id
+  def session_id({:data, session_id, _position, _data}), do: session_id
+  def session_id({:ack, session_id, _position}), do: session_id
+
   defp parse_int(bin) do
     case Integer.parse(bin) do
       {int, ""} when int < @max_int -> {:ok, int}
