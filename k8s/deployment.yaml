@@ -64,3 +64,7 @@ spec:
       port: 5005
       targetPort: 5005
       name: "speed-daemon"
+    - protocol: UDP
+      port: 5006
+      targetPort: 5006
+      name: "line-reversal"      
