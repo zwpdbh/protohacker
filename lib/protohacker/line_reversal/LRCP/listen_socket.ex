@@ -1,6 +1,9 @@
 defmodule Protohacker.LineReversal.LRCP.ListenSocket do
   use GenServer
+  require Logger
   alias Protohacker.LineReversal.LRCP
+
+  @type t() :: %__MODULE__{pid: pid()}
 
   defstruct [
     :pid
@@ -62,5 +65,67 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
         updated_state = update_in(state.accept_queue, fn q -> :queue.in(from, q) end)
         {:noreply, updated_state}
     end
+  end
+
+  @impl true
+  def handle_info({:udp, udp_socket, pi, port, packet}, %State{udp_socket: udp_socket} = state) do
+    :ok = :inet.setopts(udp_socket, active: :once)
+
+    case LRCP.Protocol.parse_packet(packet) do
+      {:ok, packet} ->
+        handle_packet(state, pi, port, packet)
+
+      :error ->
+        {:noreply, state}
+    end
+  end
+
+  # ------------------------
+  # Helpers
+  # ------------------------
+  defp handle_packet(%State{} = state, ip, port, {:connect, session_id}) do
+    spec = {LRCP.Socket, [%__MODULE__{pid: self()}, state.udp_socket, ip, port, session_id]}
+
+    case DynamicSupervisor.start_child(state.supervisor, spec) do
+      {:ok, socket_pid} ->
+        socket = %LRCP.Socket{pid: socket_pid}
+
+        case get_and_update_in(state.accept_queue, fn q -> :queue.out(q) end) do
+          {{:value, from}, state} ->
+            # REVIEW the usage of GenServer.reply
+            GenServer.reply(from, {:ok, socket})
+            {:noreply, state}
+
+          {:empty, state} ->
+            state = update_in(state.ready_sockets, fn q -> :queue.in(socket, q) end)
+            {:noreply, state}
+        end
+
+      {:error, {:already_started, _pid}} ->
+        :ok = LRCP.Socket.resend_connect_ack(%__MODULE__{pid: self()}, session_id)
+        {:noreply, state}
+
+      {:error, reason} ->
+        Logger.error("failed to start connection: #{inspect(reason)}")
+        {:noreply, state}
+    end
+  end
+
+  defp handle_packet(state, ip, port, {:close, session_id}) do
+    _ = LRCP.Socket.close(%__MODULE__{pid: self()}, session_id)
+    send_close(state, ip, port, session_id)
+
+    {:noreply, state}
+  end
+
+  defp handle_packet(state, ip, port, packet) do
+    case LRCP.Socket.handle_packet(%__MODULE__{pid: self()}, packet) do
+      :ok -> :ok
+      :not_found -> send_close(state, ip, port, LRCP.Protocol.session_id(packet))
+    end
+  end
+
+  defp send_close(state, ip, port, session_id) do
+    :ok = :gen_udp.send(state.udp_socket, ip, port, "/close/#{session_id}/")
   end
 end
