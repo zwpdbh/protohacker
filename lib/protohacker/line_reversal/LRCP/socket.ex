@@ -164,13 +164,16 @@ defmodule Protohacker.LineReversal.LRCP.Socket do
       unescaped_data = unescape_data(data)
 
       state =
-        put_in(state.in_position, fn in_position -> in_position + byte_size(unescaped_data) end)
+        update_in(state.in_position, fn in_position -> in_position + byte_size(unescaped_data) end)
 
       udp_send(state, "/ack/#{state.session_id}/#{state.in_position}/")
-      state = send_or_queue_message(state, {:lrcp, %__MODULE__{pid: self()}, unescaped_data})
+
+      state =
+        send_or_queue_message(state, {:lrcp, %__MODULE__{pid: self()}, unescaped_data})
+
       {:noreply, state}
     else
-      udp_send(state, "/ack/#{state.session_id}/#{state.in_position}")
+      udp_send(state, "/ack/#{state.session_id}/#{state.in_position}/")
       {:noreply, state}
     end
   end

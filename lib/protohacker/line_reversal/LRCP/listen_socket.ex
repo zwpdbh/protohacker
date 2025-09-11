@@ -123,6 +123,8 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
       :ok -> :ok
       :not_found -> send_close(state, ip, port, LRCP.Protocol.session_id(packet))
     end
+
+    {:noreply, state}
   end
 
   defp send_close(state, ip, port, session_id) do

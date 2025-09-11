@@ -22,8 +22,8 @@ defmodule Protohacker.LineReversal.Connection do
 
   @impl true
   def handle_info({:lrcp, socket, data}, %__MODULE__{socket: socket} = state) do
+    Logger.debug("received LRCP data: #{inspect(data)}")
     state = update_in(state.buffer, fn b -> b <> data end)
-
     state = handle_new_data(state)
 
     {:noreply, state}
