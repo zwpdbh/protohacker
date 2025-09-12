@@ -91,4 +91,12 @@ defmodule Protohacker.LineReversal.LRCP.Protocol do
       _ -> :error
     end
   end
+
+  # ------------------------
+  # My Notes
+  # ------------------------
+
+  # If a peer receives an ACK with position N, it means:
+  # I have received all bytes up to (and including) position N-1.
+  # The next byte I expect is at position N.
 end

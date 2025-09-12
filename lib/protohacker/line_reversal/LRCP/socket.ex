@@ -125,7 +125,7 @@ defmodule Protohacker.LineReversal.LRCP.Socket do
   @impl true
   def handle_call({:send, data}, _from, %State{} = state) do
     state = update_in(state.pending_out_payload, fn payload -> payload <> data end)
-    state = send_data(state, state.pending_out_payload)
+    state = send_data(state, data)
 
     {:reply, :ok, state}
   end
@@ -184,7 +184,7 @@ defmodule Protohacker.LineReversal.LRCP.Socket do
         {:noreply, state}
 
       length > state.out_position ->
-        udp_send(state, "/close/#{state.session_id}")
+        udp_send(state, "/close/#{state.session_id}/")
 
         state =
           send_or_queue_message(
@@ -241,6 +241,8 @@ defmodule Protohacker.LineReversal.LRCP.Socket do
         <<chunk::binary-size(@max_data_length), rest::binary>> -> {chunk, rest}
         chunk -> {chunk, ""}
       end
+
+    {chunk, rest}
 
     udp_send(state, "/data/#{state.session_id}/#{state.out_position}/#{escape_data(chunk)}/")
     state = update_in(state.out_position, fn x -> x + byte_size(chunk) end)
