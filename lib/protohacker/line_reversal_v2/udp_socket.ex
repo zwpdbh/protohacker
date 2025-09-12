@@ -1,5 +1,6 @@
 defmodule Protohacker.LineReversalV2.UdpSocket do
   require Logger
+
   alias Protohacker.LineReversal.LRCP
   use GenServer
 
@@ -44,16 +45,14 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     end
   end
 
-  defp handle_packet(%__MODULE__{} = state, ip, port, packet) do
-    session_id = LRCP.Protocol.session_id(packet)
-
+  defp handle_packet(%__MODULE__{} = state, ip, port, {:connect, session_id}) do
     case Protohacker.LineReversalV2.ConnectionSupervisor.start_child(ip, port, session_id) do
       {:ok, client_pid} ->
-        GenServer.cast(client_pid, {:process_packet, packet})
+        GenServer.cast(client_pid, :connect)
         {:noreply, state}
 
       {:error, {:already_started, client_pid}} ->
-        GenServer.cast(client_pid, {:resent_connect_ack, packet})
+        GenServer.cast(client_pid, :resent_connect_ack)
         {:noreply, state}
 
       {:error, reason} ->
@@ -62,6 +61,48 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
         )
 
         {:stop, reason}
+    end
+  end
+
+  defp handle_packet(%__MODULE__{} = state, ip, port, {:close, session_id}) do
+    with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
+      GenServer.cast(client_pid, :close)
+
+      {:noreply, state}
+    else
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  defp handle_packet(%__MODULE__{} = state, ip, port, {:data, session_id, pos, binary_data}) do
+    with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
+      GenServer.cast(client_pid, {:process_binary, pos, binary_data})
+      {:noreply, state}
+    else
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  defp handle_packet(%__MODULE__{} = state, ip, port, {:ack, session_id, pos}) do
+    with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
+      GenServer.cast(client_pid, {:ack, pos})
+      {:noreply, state}
+    else
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
+
+  defp find_client_connection(ip, port, session_id) do
+    case Registry.lookup(Protohacker.LineReversalV2.Registry, {ip, port, session_id}) do
+      [] ->
+        {:error,
+         "there is no associated client connection for #{inspect({ip, port, session_id})}"}
+
+      [{pid, _value}] ->
+        {:ok, pid}
     end
   end
 end
