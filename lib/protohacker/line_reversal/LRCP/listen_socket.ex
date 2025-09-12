@@ -68,12 +68,12 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
   end
 
   @impl true
-  def handle_info({:udp, udp_socket, pi, port, packet}, %State{udp_socket: udp_socket} = state) do
+  def handle_info({:udp, udp_socket, ip, port, packet}, %State{udp_socket: udp_socket} = state) do
     :ok = :inet.setopts(udp_socket, active: :once)
 
     case LRCP.Protocol.parse_packet(packet) do
       {:ok, packet} ->
-        handle_packet(state, pi, port, packet)
+        handle_packet(state, ip, port, packet)
 
       :error ->
         {:noreply, state}

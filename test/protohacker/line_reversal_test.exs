@@ -281,7 +281,7 @@ defmodule Protohacker.LineReversalTest do
     end
 
     defp udp_send(client, data) do
-      assert :ok = :gen_udp.send(client, {127, 0, 0, 1}, 5006, data)
+      assert :ok = :gen_udp.send(client, {127, 0, 0, 1}, 5007, data)
     end
   end
 end
