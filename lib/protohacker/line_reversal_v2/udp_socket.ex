@@ -95,6 +95,9 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
       GenServer.cast(client_pid, {:process_binary, pos, binary_data})
       {:noreply, state}
     else
+      {:error, :no_associated_client} ->
+        :gen_udp.send(state.socket, ip, port, "/close/#{session_id}/")
+
       {:error, reason} ->
         {:stop, reason}
     end
@@ -113,8 +116,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   defp find_client_connection(ip, port, session_id) do
     case Registry.lookup(Protohacker.LineReversalV2.Registry, {ip, port, session_id}) do
       [] ->
-        {:error,
-         "there is no associated client connection for #{inspect({ip, port, session_id})}"}
+        {:error, :no_associated_client}
 
       [{pid, _value}] ->
         {:ok, pid}
