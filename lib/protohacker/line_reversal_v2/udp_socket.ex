@@ -32,6 +32,17 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     end
   end
 
+  def upd_send(ip, port, data) do
+    GenServer.cast(__MODULE__, {:udp_send, ip, port, data})
+  end
+
+  @impl true
+  def handle_cast({:udp_send, ip, port, data}, state) do
+    :gen_udp.send(state.socket, ip, port, data)
+
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info({:udp, udp_socket, ip, port, packet}, state) do
     :ok = :inet.setopts(udp_socket, active: :once)
