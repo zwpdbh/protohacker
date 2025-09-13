@@ -35,6 +35,27 @@ defmodule Protohacker.LineReversalV2.ClientConnection do
   end
 
   @impl true
+  def handle_continue(:process_buffer, %__MODULE__{} = state) do
+    case String.split(state.pending_out_payload, "\n", parts: 2) do
+      [_no_line_yet] ->
+        {:noreply, state}
+
+      [line, rest] ->
+        data_to_send = String.reverse(line) <> "\n"
+
+        udp_send(
+          state,
+          "/data/#{state.session_id}/#{state.out_position}/#{escape_data(data_to_send)}/"
+        )
+
+        state = update_in(state.out_position, fn x -> x + byte_size(data_to_send) end)
+        state = update_in(state.pending_out_payload, fn _ -> rest end)
+
+        {:noreply, state, {:continue, :process_buffer}}
+    end
+  end
+
+  @impl true
   def handle_cast(:connect, %__MODULE__{} = state) do
     udp_send(state, "/ack/#{state.session_id}/0/")
     {:noreply, state}
@@ -63,9 +84,9 @@ defmodule Protohacker.LineReversalV2.ClientConnection do
         update_in(state.in_position, fn in_position -> in_position + byte_size(unescaped_data) end)
 
       udp_send(state, "/ack/#{state.session_id}/#{state.in_position}/")
-      udp_send(state, unescaped_data)
 
-      {:noreply, state}
+      state = update_in(state.pending_out_payload, fn p -> p <> unescaped_data end)
+      {:noreply, state, {:continue, :process_buffer}}
     else
       udp_send(state, "/ack/#{state.session_id}/#{state.in_position}/")
       {:noreply, state}
