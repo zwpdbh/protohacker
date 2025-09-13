@@ -1,5 +1,6 @@
 defmodule Protohacker.LineReversalTest do
   use ExUnit.Case, async: true
+  require Logger
   alias Protohacker.LineReversal.LRCP.Protocol
   @max_int 2_147_483_648
 

@@ -32,9 +32,22 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     end
   end
 
-  def upd_send(ip, port, data) do
-    GenServer.cast(__MODULE__, {:udp_send, ip, port, data})
+  @impl true
+  def handle_info({:udp, udp_socket, ip, port, packet}, state) do
+    :ok = :inet.setopts(udp_socket, active: :once)
+
+    case LRCP.Protocol.parse_packet(packet) |> dbg() do
+      {:ok, message} ->
+        handle_message(state, ip, port, message)
+
+      :error ->
+        {:noreply, state}
+    end
   end
+
+  # ------------------------
+  # callbacks
+  # ------------------------
 
   @impl true
   def handle_cast({:udp_send, ip, port, data}, state) do
@@ -43,20 +56,10 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     {:noreply, state}
   end
 
-  @impl true
-  def handle_info({:udp, udp_socket, ip, port, packet}, state) do
-    :ok = :inet.setopts(udp_socket, active: :once)
-
-    case LRCP.Protocol.parse_packet(packet) do
-      {:ok, packet} ->
-        handle_packet(state, ip, port, packet)
-
-      :error ->
-        {:noreply, state}
-    end
-  end
-
-  defp handle_packet(%__MODULE__{} = state, ip, port, {:connect, session_id}) do
+  # ------------------------
+  # helpers
+  # ------------------------
+  defp handle_message(%__MODULE__{} = state, ip, port, {:connect, session_id}) do
     case Protohacker.LineReversalV2.ConnectionSupervisor.start_child(ip, port, session_id) do
       {:ok, client_pid} ->
         GenServer.cast(client_pid, :connect)
@@ -75,7 +78,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     end
   end
 
-  defp handle_packet(%__MODULE__{} = state, ip, port, {:close, session_id}) do
+  defp handle_message(%__MODULE__{} = state, ip, port, {:close, session_id}) do
     with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
       GenServer.cast(client_pid, :close)
 
@@ -86,7 +89,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     end
   end
 
-  defp handle_packet(%__MODULE__{} = state, ip, port, {:data, session_id, pos, binary_data}) do
+  defp handle_message(%__MODULE__{} = state, ip, port, {:data, session_id, pos, binary_data}) do
     with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
       GenServer.cast(client_pid, {:process_binary, pos, binary_data})
       {:noreply, state}
@@ -96,7 +99,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     end
   end
 
-  defp handle_packet(%__MODULE__{} = state, ip, port, {:ack, session_id, pos}) do
+  defp handle_message(%__MODULE__{} = state, ip, port, {:ack, session_id, pos}) do
     with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
       GenServer.cast(client_pid, {:ack, pos})
       {:noreply, state}
@@ -115,5 +118,18 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
       [{pid, _value}] ->
         {:ok, pid}
     end
+  end
+
+  # ------------------------
+  # Interface function
+  # ------------------------
+  def upd_send(ip, port, data) do
+    GenServer.cast(__MODULE__, {:udp_send, ip, port, data})
+  end
+
+  @impl true
+  def terminate(reason, _state) do
+    Logger.warning("terminating: #{inspect(reason)}")
+    :ok
   end
 end

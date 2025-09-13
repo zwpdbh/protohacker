@@ -70,6 +70,7 @@ defmodule Protohacker.LineReversalV2.ClientConnection do
 
   @impl true
   def handle_cast(:close, %__MODULE__{} = state) do
+    udp_send(state, "/close/#{state.session_id}/")
     {:stop, :normal, state}
   end
 
