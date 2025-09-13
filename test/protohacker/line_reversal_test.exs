@@ -1,5 +1,5 @@
 defmodule Protohacker.LineReversalTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case
   require Logger
   alias Protohacker.LineReversal.LRCP.Protocol
   @max_int 2_147_483_648
@@ -62,15 +62,11 @@ defmodule Protohacker.LineReversalTest do
       {client, session_id} = open_udp()
 
       udp_send(client, "invalid")
-      Process.sleep(100)
       udp_send(client, "/connect/1")
-      Process.sleep(100)
       udp_send(client, "connect/1/")
-      Process.sleep(100)
       udp_send(client, "/ack/")
-      Process.sleep(100)
       udp_send(client, "//")
-
+      Process.sleep(50)
       # We can still connect after invalid messages
       udp_send(client, "/connect/#{session_id}/")
       assert udp_recv(client) == "/ack/#{session_id}/0/"

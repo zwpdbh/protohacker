@@ -36,7 +36,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   def handle_info({:udp, udp_socket, ip, port, packet}, state) do
     :ok = :inet.setopts(udp_socket, active: :once)
 
-    case LRCP.Protocol.parse_packet(packet) |> dbg() do
+    case LRCP.Protocol.parse_packet(packet) do
       {:ok, message} ->
         handle_message(state, ip, port, message)
 
