@@ -11,8 +11,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   end
 
   defstruct [
-    :socket,
-    :pending_packets
+    :socket
   ]
 
   @impl true
@@ -26,7 +25,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     case :gen_udp.open(@port, options) do
       {:ok, socket} ->
         Logger.debug("start line reversal server at port: #{@port}")
-        {:ok, %__MODULE__{socket: socket, pending_packets: []}}
+        {:ok, %__MODULE__{socket: socket}}
 
       {:error, reason} ->
         {:stop, reason}
@@ -34,54 +33,15 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   end
 
   @impl true
-  def handle_info({:udp, udp_socket, ip, port, packet}, %__MODULE__{} = state) do
+  def handle_info({:udp, udp_socket, ip, port, packet}, state) do
     :ok = :inet.setopts(udp_socket, active: :once)
 
-    state =
-      update_in(state.pending_packets, fn packets ->
-        packets ++ [{ip, port, packet}]
-      end)
+    case LRCP.Protocol.parse_packet(packet) |> dbg() do
+      {:ok, message} ->
+        handle_message(state, ip, port, message)
 
-    {:noreply, state, {:continue, :process_packet}}
-  end
-
-  # @impl true
-  # def handle_continue(
-  #       :process_packet,
-  #       %__MODULE__{pending_packets: packets} = state
-  #     ) do
-  #   packets |> dbg()
-
-  #   {:noreply, state}
-  # end
-
-  @impl true
-  def handle_continue(
-        :process_packet,
-        %__MODULE__{pending_packets: packets} = state
-      ) do
-    packets |> dbg()
-
-    case packets do
-      [] ->
+      :error ->
         {:noreply, state}
-
-      [{ip, port, packet} | rest] ->
-        case LRCP.Protocol.parse_packet(packet) do
-          {:ok, message} ->
-            case handle_message(state, ip, port, message) do
-              {:ok, state} ->
-                state = put_in(state.pending_packets, rest)
-                {:noreply, state}
-
-              {:error, reason} ->
-                {:stop, reason}
-            end
-
-          :error ->
-            state = put_in(state.pending_packets, rest)
-            {:noreply, state}
-        end
     end
   end
 
@@ -91,6 +51,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
 
   @impl true
   def handle_cast({:udp_send, ip, port, data}, state) do
+    data |> dbg()
     :gen_udp.send(state.socket, ip, port, data)
 
     {:noreply, state}
@@ -103,18 +64,18 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     case Protohacker.LineReversalV2.ConnectionSupervisor.start_child(ip, port, session_id) do
       {:ok, client_pid} ->
         GenServer.cast(client_pid, :connect)
-        {:ok, state}
+        {:noreply, state}
 
       {:error, {:already_started, client_pid}} ->
         GenServer.cast(client_pid, :resent_connect_ack)
-        {:ok, state}
+        {:noreply, state}
 
       {:error, reason} ->
         Logger.error(
           "failed to create client for ip: #{inspect(ip)}}, port: #{inspect(port)}, session_id: #{inspect(session_id)}"
         )
 
-        {:error, reason}
+        {:stop, reason}
     end
   end
 
@@ -122,30 +83,30 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
       GenServer.cast(client_pid, :close)
 
-      {:ok, state}
+      {:noreply, state}
     else
       {:error, reason} ->
-        {:error, reason}
+        {:stop, reason}
     end
   end
 
   defp handle_message(%__MODULE__{} = state, ip, port, {:data, session_id, pos, binary_data}) do
     with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
       GenServer.cast(client_pid, {:process_binary, pos, binary_data})
-      {:ok, state}
+      {:noreply, state}
     else
       {:error, reason} ->
-        {:error, reason}
+        {:stop, reason}
     end
   end
 
   defp handle_message(%__MODULE__{} = state, ip, port, {:ack, session_id, pos}) do
     with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
       GenServer.cast(client_pid, {:ack, pos})
-      {:ok, state}
+      {:noreply, state}
     else
       {:error, reason} ->
-        {:error, reason}
+        {:stop, reason}
     end
   end
 

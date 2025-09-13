@@ -62,13 +62,13 @@ defmodule Protohacker.LineReversalTest do
       {client, session_id} = open_udp()
 
       udp_send(client, "invalid")
-      # Process.sleep(100)
+      Process.sleep(100)
       udp_send(client, "/connect/1")
-      # Process.sleep(100)
+      Process.sleep(100)
       udp_send(client, "connect/1/")
-      # Process.sleep(100)
+      Process.sleep(100)
       udp_send(client, "/ack/")
-      # Process.sleep(100)
+      Process.sleep(100)
       udp_send(client, "//")
 
       # We can still connect after invalid messages
