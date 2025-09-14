@@ -66,7 +66,7 @@ defmodule Protohacker.LineReversalTest do
       udp_send(client, "connect/1/")
       udp_send(client, "/ack/")
       udp_send(client, "//")
-      Process.sleep(50)
+      Process.sleep(10)
       # We can still connect after invalid messages
       udp_send(client, "/connect/#{session_id}/")
       assert udp_recv(client) == "/ack/#{session_id}/0/"

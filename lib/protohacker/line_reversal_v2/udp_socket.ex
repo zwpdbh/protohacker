@@ -28,7 +28,8 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
         {:ok, %__MODULE__{socket: socket}}
 
       {:error, reason} ->
-        {:stop, reason}
+        Logger.warning("UdpSocket stop due to reason: #{inspect(reason)}")
+        {:stop, :normal}
     end
   end
 
@@ -51,7 +52,6 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
 
   @impl true
   def handle_cast({:udp_send, ip, port, data}, state) do
-    data |> dbg()
     :gen_udp.send(state.socket, ip, port, data)
 
     {:noreply, state}
@@ -85,8 +85,9 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
 
       {:noreply, state}
     else
-      {:error, reason} ->
-        {:stop, reason}
+      {:error, :no_associated_client} ->
+        :gen_udp.send(state.socket, ip, port, "/close/#{session_id}/")
+        {:noreply, state}
     end
   end
 
@@ -97,9 +98,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
     else
       {:error, :no_associated_client} ->
         :gen_udp.send(state.socket, ip, port, "/close/#{session_id}/")
-
-      {:error, reason} ->
-        {:stop, reason}
+        {:noreply, state}
     end
   end
 
@@ -108,8 +107,8 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
       GenServer.cast(client_pid, {:ack, pos})
       {:noreply, state}
     else
-      {:error, reason} ->
-        {:stop, reason}
+      {:error, :no_associated_client} ->
+        {:noreply, state}
     end
   end
 
