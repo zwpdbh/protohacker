@@ -9,7 +9,6 @@ defmodule Protohacker.LineReversal.Supervisor do
   def init(:no_args) do
     children = [
       {Registry, name: Protohacker.LineReversal.Registry, keys: :unique},
-      {Protohacker.LineReversal.ConnectionSupervisor, []},
       {Protohacker.LineReversal.Acceptor, ip: {0, 0, 0, 0}, port: 5006}
     ]
 

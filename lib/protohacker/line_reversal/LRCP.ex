@@ -12,7 +12,7 @@ defmodule Protohacker.LineReversal.LRCP do
 
   @spec accept(listen_socket()) :: {:ok, socket()} | {:error, term()}
   def accept(%ListenSocket{} = listen_socket) do
-    ListenSocket.accpet(listen_socket)
+    ListenSocket.accept(listen_socket)
   end
 
   def controlling_process(%Socket{} = socket, pid) when is_pid(pid) do
