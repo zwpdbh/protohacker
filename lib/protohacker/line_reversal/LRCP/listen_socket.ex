@@ -34,10 +34,18 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
   # Notice the async, event nature when we set "active: :once" in init of this GenServer to
   # open UDP connection.
   # So, a connection packet could arrive any time.
-  # The first arrival of udp packet and call LRCP.accept is not determined.
+  # The first arrival of udp packet and call LRCP.accept is non-deterministic.
+  # In other words: Non-Deterministic timing force use to use queues.
+  # Think of It Like a Restaurant Again
+  # Clients (producers) arrive whenever they want.
+  # Hosts (consumers) become available whenever they finish seating the previous group.
+  # Waiting area (ready_sockets) holds clients who arrived early.
+  # Host queue (accept_queue) holds hosts who are ready but no clients are waiting.
+  # The system works smoothly regardless of who arrives first.
   defmodule State do
     defstruct [
       :udp_socket,
+      # The supervisor is used to spawn LRCP.Socket per session.
       :supervisor,
       # A queue of processes waiting to accept a new connection
       # Enqueue is done by LRCP.accept(listen_socket)

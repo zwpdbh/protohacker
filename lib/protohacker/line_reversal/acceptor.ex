@@ -25,7 +25,7 @@ defmodule Protohacker.LineReversal.Acceptor do
   defp accept_loop(%LRCP.ListenSocket{} = listen_socket) do
     # We keep call :accept on GenServer listen_socket
     case LRCP.accept(listen_socket) do
-      {:ok, socket} ->
+      {:ok, %LRCP.Socket{} = socket} ->
         {:ok, handler} = Protohacker.LineReversal.Connection.start_link(socket)
         :ok = LRCP.controlling_process(socket, handler)
 

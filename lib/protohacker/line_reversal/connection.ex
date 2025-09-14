@@ -4,7 +4,7 @@ defmodule Protohacker.LineReversal.Connection do
   require Logger
   use GenServer
 
-  def start_link(socket) do
+  def start_link(%LRCP.Socket{} = socket) do
     GenServer.start_link(__MODULE__, socket)
   end
 
