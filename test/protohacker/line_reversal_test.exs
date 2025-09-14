@@ -1,8 +1,9 @@
 defmodule Protohacker.LineReversalTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   require Logger
   alias Protohacker.LineReversal.LRCP.Protocol
   @max_int 2_147_483_648
+  @port 5006
 
   describe "Protocol test" do
     test "invalid packets" do
@@ -66,7 +67,7 @@ defmodule Protohacker.LineReversalTest do
       udp_send(client, "connect/1/")
       udp_send(client, "/ack/")
       udp_send(client, "//")
-      Process.sleep(10)
+
       # We can still connect after invalid messages
       udp_send(client, "/connect/#{session_id}/")
       assert udp_recv(client) == "/ack/#{session_id}/0/"
@@ -282,7 +283,7 @@ defmodule Protohacker.LineReversalTest do
     end
 
     defp udp_send(client, data) do
-      assert :ok = :gen_udp.send(client, {127, 0, 0, 1}, 5007, data)
+      assert :ok = :gen_udp.send(client, {127, 0, 0, 1}, @port, data)
     end
   end
 end

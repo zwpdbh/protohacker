@@ -21,6 +21,7 @@ defmodule Protohacker.LineReversalV2.Supervisor do
   def init(:no_args) do
     children = [
       {Registry, name: Protohacker.LineReversalV2.Registry, keys: :unique},
+      {Task.Supervisor, name: Protohacker.LineReversalV2.HandleUdpPacketTaskSupervisor},
       {Protohacker.LineReversalV2.ConnectionSupervisor, []},
       {Protohacker.LineReversalV2.UdpSocket, []}
     ]

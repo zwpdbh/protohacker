@@ -37,13 +37,26 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   def handle_info({:udp, udp_socket, ip, port, packet}, state) do
     :ok = :inet.setopts(udp_socket, active: :once)
 
-    case LRCP.Protocol.parse_packet(packet) do
-      {:ok, message} ->
-        handle_message(state, ip, port, message)
+    Task.Supervisor.start_child(
+      Protohacker.LineReversalV2.HandleUdpPacketTaskSupervisor,
+      fn ->
+        try do
+          case LRCP.Protocol.parse_packet(packet) do
+            {:ok, message} ->
+              handle_message(state, ip, port, message)
 
-      :error ->
-        {:noreply, state}
-    end
+            :error ->
+              Logger.warning("Failed to parse packet: #{inspect(packet)}")
+          end
+        rescue
+          e ->
+            Logger.error("Task crashed handling packet: #{inspect(packet)}")
+            Logger.error(Exception.format(:error, e, __STACKTRACE__))
+        end
+      end
+    )
+
+    {:noreply, state}
   end
 
   # ------------------------
@@ -72,10 +85,10 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
 
       {:error, reason} ->
         Logger.error(
-          "failed to create client for ip: #{inspect(ip)}}, port: #{inspect(port)}, session_id: #{inspect(session_id)}"
+          "failed to create client for ip: #{inspect(ip)}}, port: #{inspect(port)}, session_id: #{inspect(session_id)}, reason: #{inspect(reason)}"
         )
 
-        {:stop, reason}
+        {:noreply, state}
     end
   end
 
@@ -86,7 +99,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
       {:noreply, state}
     else
       {:error, :no_associated_client} ->
-        :gen_udp.send(state.socket, ip, port, "/close/#{session_id}/")
+        upd_send(ip, port, "/close/#{session_id}/")
         {:noreply, state}
     end
   end
@@ -97,7 +110,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
       {:noreply, state}
     else
       {:error, :no_associated_client} ->
-        :gen_udp.send(state.socket, ip, port, "/close/#{session_id}/")
+        upd_send(ip, port, "/close/#{session_id}/")
         {:noreply, state}
     end
   end
