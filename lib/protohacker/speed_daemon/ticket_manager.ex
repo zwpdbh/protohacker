@@ -1,193 +1,148 @@
 defmodule Protohacker.SpeedDaemon.TicketManager do
   require Logger
   use GenServer
-  alias Protohacker.SpeedDaemon.Message
-
-  defp day(timestamp) do
-    div(timestamp, 86400)
-  end
+  alias Protohacker.SpeedDaemon.{DispatchersRegistry, Message}
 
   def start_link([] = _opts) do
     GenServer.start_link(__MODULE__, :no_state, name: __MODULE__)
   end
 
-  defstruct [
-    :tickets,
-    :send_records,
-    :previous_plate_event
-  ]
-
-  defp ticket_id(%Protohacker.SpeedDaemon.Message.Ticket{} = ticket) do
-    "#{ticket.plate}#{ticket.road}#{ticket.timestamp1}#{ticket.timestamp2}"
+  defmodule Road do
+    defstruct [:id, :speed_limit, observations: %{}, pending_tickets: []]
   end
+
+  defstruct roads: %{},
+            sent_tickets_per_day: []
 
   @impl true
   def init(:no_state) do
-    # Record previous plate event from camera.
-    previous_plate_event = %{}
-
-    # Store the pending tickets to send,
-    # key is ticket_id, value is ticket.
-    tickets = %{}
-
-    # Store the tickets send record to make sure: only 1 ticket per car per day.
-    # key is {ticket.plate, day(timestamp)}, value is ticket
-    send_records = %{}
-
-    {:ok,
-     %__MODULE__{
-       previous_plate_event: previous_plate_event,
-       tickets: tickets,
-       send_records: send_records
-     }}
+    {:ok, %__MODULE__{}}
   end
 
   @impl true
-  def handle_cast(
-        {:dispatcher_is_online, %Message.IAmDispatcher{} = dispatcher},
-        %__MODULE__{} = state
-      ) do
-    for {ticket_id, %Message.Ticket{} = ticket} <- state.tickets do
-      if ticket.road in dispatcher.roads do
-        :ok =
-          Phoenix.PubSub.broadcast!(
-            :speed_daemon,
-            "ticket_generated_road_#{ticket.road}",
-            {:ticket_available, ticket_id}
-          )
-      end
-    end
+  def handle_cast(cast, state)
 
+  def handle_cast({:add_road, road_id, speed_limit}, state) do
+    Logger.debug("Added road #{road_id} with speed limit #{speed_limit}")
+    new_road = %Road{id: road_id, speed_limit: speed_limit}
+    state = update_in(state.roads, &Map.put_new(&1, road_id, new_road))
     {:noreply, state}
   end
 
-  @doc """
-  compute if the same plate have exceed the limit by compute its recent two event: {mile, timestamp}
-  """
-  @impl true
-  def handle_cast(
-        {:plate_event,
-         %{plate: plate, timestamp: timestamp, limit: limit, mile: mile, road: road}},
-        %__MODULE__{} = state
-      ) do
-    key = plate
+  def handle_cast({:register_observation, road_id, location, plate, timestamp}, state) do
+    state =
+      update_in(state.roads[road_id].observations[plate], fn observations ->
+        observations = observations || []
+        [{timestamp, location}] ++ observations
+      end)
 
-    updated_previous_plate_event =
-      case Map.get(state.previous_plate_event, key) do
-        nil ->
-          # first see that plate, record it
-          Map.put(state.previous_plate_event, key, {mile, timestamp})
+    road = generate_tickets(state.roads[road_id], plate)
 
-        {prev_mile, prev_timestamp} when mile == prev_mile and timestamp == prev_timestamp ->
-          Logger.warning("exact same mile and timestamp recorded")
-          Map.put(state.previous_plate_event, key, {mile, timestamp})
-
-        {prev_mile, prev_timestamp} ->
-          # second (or later) seen, calculate the speed
-          distance_miles = abs(mile - prev_mile)
-          time_seconds = abs(timestamp - prev_timestamp)
-          speed_mph = round(distance_miles / (time_seconds / 3600))
-
-          # mile1 and timestamp1 must refer to the earlier of the 2 observations (the smaller timestamp), and mile2 and timestamp2 must refer to the later of the 2 observations (the larger timestamp).
-          {mile1, timestamp1, mile2, timestamp2} =
-            if prev_timestamp < timestamp do
-              {prev_mile, prev_timestamp, mile, timestamp}
-            else
-              {mile, timestamp, prev_mile, prev_timestamp}
-            end
-
-          # Ticket if exceeding limit by >=0.5 mph
-          if speed_mph > limit do
-            ticket = %Protohacker.SpeedDaemon.Message.Ticket{
-              plate: plate,
-              road: road,
-              mile1: mile1,
-              timestamp1: timestamp1,
-              mile2: mile2,
-              timestamp2: timestamp2,
-              speed: speed_mph * 100
-            }
-
-            send(self(), {:save_ticket, ticket})
-          end
-
-          Map.put(state.previous_plate_event, key, {mile2, timestamp2})
-      end
-
-    {:noreply, %{state | previous_plate_event: updated_previous_plate_event}}
+    state = put_in(state.roads[road_id], road)
+    state = dispatch_tickets_to_available_dispatchers(state, road_id)
+    {:noreply, state}
   end
 
   @impl true
-  def handle_cast(
-        {:send_ticket, ticket_id, socket},
-        %__MODULE__{} = state
-      ) do
-    %Message.Ticket{} = ticket = Map.get(state.tickets, ticket_id)
-    ticket_start_day = day(ticket.timestamp1)
-    ticket_end_day = day(ticket.timestamp2)
+  def handle_info(info, state)
 
-    ticket_send_record_for_start_day =
-      Map.get(state.send_records, {ticket.plate, ticket_start_day}, false)
+  def handle_info({:register, DispatchersRegistry, road_id, _partition, _value}, state) do
+    state = dispatch_tickets_to_available_dispatchers(state, road_id)
+    {:noreply, state}
+  end
 
-    ticket_send_record_for_end_day =
-      Map.get(state.send_records, {ticket.plate, ticket_end_day}, false)
+  # We don't need to do anything here.
+  def handle_info({:unregister, DispatchersRegistry, _dispatcher, _partition}, state) do
+    {:noreply, state}
+  end
 
-    case {ticket_send_record_for_start_day, ticket_send_record_for_end_day} do
-      {false, false} ->
-        ticket_packet = ticket |> Message.encode()
+  ## Helpers
 
-        updated_send_records =
-          Map.put(state.send_records, {ticket.plate, ticket_start_day}, true)
-          |> Map.put({ticket.plate, ticket_end_day}, true)
+  defp generate_tickets(%Road{} = road, plate) do
+    observations =
+      road.observations[plate]
+      |> Enum.sort_by(fn {timestamp, _location} -> timestamp end)
+      |> Enum.dedup_by(fn {timestamp, _location} -> timestamp end)
 
-        updated_tickets = Map.delete(state.tickets, ticket_id)
+    tickets =
+      observations
+      |> Stream.zip(Enum.drop(observations, 1))
+      |> Enum.flat_map(fn {{ts1, location1}, {ts2, location2}} ->
+        distance = abs(location1 - location2)
+        speed_miles_per_hour = round(distance / (ts2 - ts1) * 3600)
 
-        :gen_tcp.send(socket, ticket_packet)
+        if speed_miles_per_hour > road.speed_limit do
+          [
+            %Message.Ticket{
+              plate: plate,
+              road: road.id,
+              mile1: location1,
+              timestamp1: ts1,
+              mile2: location2,
+              timestamp2: ts2,
+              speed: speed_miles_per_hour * 100
+            }
+          ]
+        else
+          []
+        end
+      end)
 
-        Logger.info(
-          "sent ticket: #{inspect(ticket)}, ticket_start_day: #{ticket_start_day}, ticket_end_day: #{ticket_end_day}"
-        )
+    %Road{road | pending_tickets: road.pending_tickets ++ tickets}
+  end
 
-        {:noreply,
-         %__MODULE__{state | send_records: updated_send_records, tickets: updated_tickets}}
+  defp dispatch_tickets_to_available_dispatchers(state, road_id) do
+    case Map.fetch(state.roads, road_id) do
+      {:ok, %Road{} = road} ->
+        {tickets_left_to_dispatch, sent_tickets_per_day} =
+          Enum.flat_map_reduce(
+            state.roads[road_id].pending_tickets,
+            state.sent_tickets_per_day,
+            fn ticket, acc ->
+              case Registry.lookup(DispatchersRegistry, road.id) do
+                [] ->
+                  Logger.debug("No dispatchers available for road #{ticket.road}, keeping ticket")
+                  {[ticket], acc}
 
-      {_, _} ->
-        {:noreply, state}
+                dispatchers ->
+                  ticket_start_day = floor(ticket.timestamp1 / 86_400)
+                  ticket_end_day = floor(ticket.timestamp2 / 86_400)
+
+                  if {ticket_start_day, ticket.plate} in acc or
+                       {ticket_end_day, ticket.plate} in acc do
+                    Logger.debug(
+                      "Not sending ticket because it was already sent for this day: #{inspect(ticket)}"
+                    )
+
+                    {[], acc}
+                  else
+                    {pid, _} = Enum.random(dispatchers)
+                    GenServer.cast(pid, {:dispatch_ticket, ticket})
+
+                    sent = for day <- ticket_start_day..ticket_end_day, do: {day, ticket.plate}
+                    {[], acc ++ sent}
+                  end
+              end
+            end
+          )
+
+        state = put_in(state.sent_tickets_per_day, sent_tickets_per_day)
+        state = put_in(state.roads[road_id].pending_tickets, tickets_left_to_dispatch)
+        state
+
+      :error ->
+        state
     end
   end
 
-  @impl true
-  def handle_info(
-        {:save_ticket, %Protohacker.SpeedDaemon.Message.Ticket{} = ticket},
-        %__MODULE__{} = state
-      ) do
-    ticket_id = ticket_id(ticket)
-    updated_tickets = Map.put(state.tickets, ticket_id, ticket)
-
-    # Notifice dispatcher that
-    :ok =
-      Phoenix.PubSub.broadcast!(
-        :speed_daemon,
-        "ticket_generated_road_#{ticket.road}",
-        {:ticket_available, ticket_id}
-      )
-
-    {:noreply, %{state | tickets: updated_tickets}}
+  # ------------------------
+  # Interface
+  # ------------------------
+  def add_road(road, speed_limit) do
+    GenServer.cast(__MODULE__, {:add_road, road, speed_limit})
   end
 
-  def save_ticket(ticket) do
-    GenServer.cast(__MODULE__, {:save_ticket, ticket})
-  end
-
-  def send_ticket_to_socket(ticket_id, socket) do
-    GenServer.cast(__MODULE__, {:send_ticket, ticket_id, socket})
-  end
-
-  def dispatcher_is_online(%Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher) do
-    GenServer.cast(__MODULE__, {:dispatcher_is_online, dispatcher})
-  end
-
-  def record_plate(plate_event) do
-    GenServer.cast(__MODULE__, {:plate_event, plate_event})
+  def register_observation(road, location, plate, timestamp) do
+    GenServer.cast(__MODULE__, {:register_observation, road, location, plate, timestamp})
   end
 end

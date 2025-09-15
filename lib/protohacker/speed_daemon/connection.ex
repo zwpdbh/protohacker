@@ -1,125 +1,141 @@
 defmodule Protohacker.SpeedDaemon.Connection do
-  require Logger
   use GenServer, restart: :temporary
+
+  alias Protohacker.SpeedDaemon.{TicketManager, DispatchersRegistry, Message}
+
+  require Logger
 
   def start_link(socket) do
     GenServer.start_link(__MODULE__, socket)
   end
 
-  defstruct [
-    :socket,
-    :role,
-    :buffer,
-    :camera,
-    :dispatcher,
-    :heartbeat_ref
-  ]
+  defstruct [:socket, :type, :heartbeat_ref, buffer: <<>>]
 
   @impl true
   def init(socket) do
-    {:ok, %__MODULE__{role: nil, buffer: "", socket: socket}}
+    Logger.debug("Client connected")
+    {:ok, %__MODULE__{socket: socket}}
   end
 
   @impl true
-  def handle_info(
-        {:tcp, socket, packet},
-        %__MODULE__{socket: socket, buffer: buffer} = state
-      ) do
+  def handle_info(message, state)
+
+  def handle_info({:tcp, socket, data}, %__MODULE__{socket: socket} = state) do
+    state = update_in(state.buffer, &(&1 <> data))
     :ok = :inet.setopts(socket, active: :once)
-    {:noreply, %__MODULE__{state | buffer: buffer <> packet}, {:continue, :process_packet}}
+    parse_all_data(state)
   end
 
-  # Handle event from subscrition for generated ticket
-  @impl true
-  def handle_info(
-        {:ticket_available, ticket_id},
-        %__MODULE__{role: :dispatcher, socket: socket} = state
-      ) do
-    Protohacker.SpeedDaemon.TicketManager.send_ticket_to_socket(ticket_id, socket)
-    {:noreply, state}
-  end
-
-  @impl true
   def handle_info({:tcp_error, socket, reason}, %__MODULE__{socket: socket} = state) do
-    Logger.error(" Connection closed because of error: #{inspect(reason)}")
+    Logger.error("Connection closed because of error: #{inspect(reason)}")
     {:stop, :normal, state}
   end
 
-  @impl true
   def handle_info({:tcp_closed, socket}, %__MODULE__{socket: socket} = state) do
+    Logger.debug("Connection closed by client")
     {:stop, :normal, state}
   end
 
   def handle_info(:send_heartbeat, %__MODULE__{} = state) do
-    msg_packet =
-      %Protohacker.SpeedDaemon.Message.Heartbeat{} |> Protohacker.SpeedDaemon.Message.encode()
-
-    :gen_tcp.send(state.socket, msg_packet)
+    send_message(state, %Message.Heartbeat{})
     {:noreply, state}
   end
 
   @impl true
-  def handle_continue(
-        :process_packet,
-        %__MODULE__{buffer: buffer} = state
-      ) do
-    case Protohacker.SpeedDaemon.Message.decode(buffer) do
+  def handle_cast({:dispatch_ticket, ticket}, %__MODULE__{type: %Message.IAmDispatcher{}} = state) do
+    send_message(state, ticket)
+    {:noreply, state}
+  end
+
+  ## Helpers
+
+  defp send_message(%__MODULE__{socket: socket}, message) do
+    Logger.debug("Sending message: #{inspect(message)}")
+    :gen_tcp.send(socket, Message.encode(message))
+  end
+
+  defp parse_all_data(%__MODULE__{} = state) do
+    case Message.decode(state.buffer) do
+      {:ok, message, rest} ->
+        Logger.debug("Received message: #{inspect(message)}")
+        state = put_in(state.buffer, rest)
+
+        case handle_message(state, message) do
+          {:ok, state} ->
+            parse_all_data(state)
+
+          {:error, message} ->
+            send_message(state, %Message.Error{message: message})
+            {:stop, :normal, state}
+        end
+
       :incomplete ->
-        {:noreply, %{state | buffer: buffer}}
-
-      {:ok, %Protohacker.SpeedDaemon.Message.WantHeartbeat{interval: interval}, remaining} ->
-        interval_in_ms = interval * 100
-
-        if state.heartbeat_ref do
-          :timer.cancel(state.heartbeat_ref)
-        end
-
-        if interval > 0 do
-          {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
-          {:noreply, %{state | heartbeat_ref: heartbeat_ref, buffer: remaining}}
-        else
-          {:noreply, %{state | buffer: remaining}}
-        end
-
-      {:ok, %Protohacker.SpeedDaemon.Message.IAmCamera{} = camera, remaining} ->
-        Logger.debug("i am camera: #{inspect(state.socket)}")
-
-        {:noreply, %{state | buffer: remaining, role: :camera, camera: camera},
-         {:continue, :process_packet}}
-
-      {:ok, %Protohacker.SpeedDaemon.Message.IAmDispatcher{} = dispatcher, remaining} ->
-        Logger.debug("i am dispatcher: #{inspect(state.socket)}")
-
-        for each_road <- dispatcher.roads do
-          :ok = Phoenix.PubSub.subscribe(:speed_daemon, "ticket_generated_road_#{each_road}")
-          Logger.debug("subscribe topic: ticket_generated_road_#{each_road}")
-        end
-
-        Protohacker.SpeedDaemon.TicketManager.dispatcher_is_online(dispatcher)
-        Logger.debug("let TicketManager know dispatcher is online")
-
-        {:noreply, %{state | buffer: remaining, role: :dispatcher, dispatcher: dispatcher},
-         {:continue, :process_packet}}
-
-      {:ok, %Protohacker.SpeedDaemon.Message.Plate{} = plate, remaining} ->
-        Protohacker.SpeedDaemon.TicketManager.record_plate(%{
-          plate: plate.plate,
-          timestamp: plate.timestamp,
-          road: state.camera.road,
-          mile: state.camera.mile,
-          limit: state.camera.limit
-        })
-
-        Logger.debug("recorded plate: #{inspect(plate)}, on camera: #{inspect(state.camera)}")
-
-        {:noreply, %{state | buffer: remaining}, {:continue, :process_packet}}
+        {:noreply, state}
 
       :error ->
-        Logger.error(
-          "error when decode buffer: #{inspect(buffer)}, current_state: #{inspect(state)}"
-        )
-
+        send_message(state, %Message.Error{message: "Invalid protocol message"})
         {:stop, :normal, state}
     end
+  end
+
+  defp handle_message(
+         %__MODULE__{type: %Message.IAmCamera{} = camera} = state,
+         %Message.Plate{} = message
+       ) do
+    TicketManager.register_observation(
+      camera.road,
+      camera.mile,
+      message.plate,
+      message.timestamp
+    )
+
+    {:ok, state}
+  end
+
+  defp handle_message(%__MODULE__{type: _other_type}, %Message.Plate{}) do
+    {:error, "Plate messages are only accepted from cameras"}
+  end
+
+  defp handle_message(state, %Message.WantHeartbeat{interval: interval}) do
+    interval_in_ms = interval * 100
+
+    if state.heartbeat_ref do
+      :timer.cancel(state.heartbeat_ref)
+    end
+
+    if interval > 0 do
+      {:ok, heartbeat_ref} = :timer.send_interval(interval_in_ms, :send_heartbeat)
+      {:ok, %__MODULE__{state | heartbeat_ref: heartbeat_ref}}
+    else
+      {:ok, %__MODULE__{state | heartbeat_ref: nil}}
+    end
+  end
+
+  defp handle_message(%__MODULE__{type: nil} = state, %Message.IAmCamera{} = message) do
+    TicketManager.add_road(message.road, message.limit)
+    Logger.metadata(type: :camera, road: message.road, mile: message.mile)
+
+    {:ok, %__MODULE__{state | type: message}}
+  end
+
+  defp handle_message(%__MODULE__{type: _other}, %Message.IAmCamera{}) do
+    {:error, "Already registered as a dispatcher or a camera"}
+  end
+
+  defp handle_message(%__MODULE__{type: nil} = state, %Message.IAmDispatcher{} = message) do
+    Enum.each(message.roads, fn road ->
+      {:ok, _} = Registry.register(DispatchersRegistry, road, :unused_value)
+    end)
+
+    Logger.metadata(type: :dispatcher)
+    {:ok, %__MODULE__{state | type: message}}
+  end
+
+  defp handle_message(%__MODULE__{type: _other}, %Message.IAmDispatcher{}) do
+    {:error, "Already registered as a dispatcher or a camera"}
+  end
+
+  defp handle_message(%__MODULE__{}, _message) do
+    {:error, "Invalid message"}
   end
 end

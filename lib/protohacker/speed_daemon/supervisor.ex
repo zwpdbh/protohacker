@@ -7,12 +7,17 @@ defmodule Protohacker.SpeedDaemon.Supervisor do
 
   @impl true
   def init(:no_args) do
+    registry_opts = [
+      name: Protohacker.SpeedDaemon.DispatchersRegistry,
+      keys: :duplicate,
+      listeners: [Protohacker.SpeedDaemon.TicketManager]
+    ]
+
     children = [
-      {Registry, keys: :unique, name: TicketGeneratorRegistry},
-      {Phoenix.PubSub, name: :speed_daemon},
-      Protohacker.SpeedDaemon.TicketManager,
-      Protohacker.SpeedDaemon.ConnectionSupervisor,
-      Protohacker.SpeedDaemon.Acceptor
+      {Registry, registry_opts},
+      {Protohacker.SpeedDaemon.TicketManager, []},
+      {Protohacker.SpeedDaemon.ConnectionSupervisor, []},
+      {Protohacker.SpeedDaemon.Acceptor, []}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

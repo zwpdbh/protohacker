@@ -22,7 +22,9 @@ defmodule Protohacker.Application do
       {Protohacker.MobMiddle, [server: server, port: port]},
       # Protohacker.MobMiddleV2.Supervisor,
       # Protohacker.SpeedDaemon
-      Protohacker.SpeedDaemon.Supervisor
+      Protohacker.SpeedDaemon.Supervisor,
+      Protohacker.LineReversal.Supervisor,
+      Protohacker.LineReversalV2.Supervisor
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
