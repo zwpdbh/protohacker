@@ -10,15 +10,15 @@ defmodule Protohacker.InsecureSocketLayer.Acceptor do
 
   def run(:no_args) do
     listen_options =
-      [mode: :binary, active: :once, reuseaddr: true]
+      [mode: :binary, active: :once, reuseaddr: true, packet: :line]
 
     case :gen_tcp.listen(@port, listen_options) do
       {:ok, listen_socket} ->
-        Logger.debug("start insecure socket layer server at port: #{inspect(@port)}")
+        Logger.debug("start insecure socket layer server at port: #{@port}")
         accept_loop(listen_socket)
 
-      [:error, reason] ->
-        raise "failed to listen on port #{inspect(@port)}, reason: #{inspect(reason)}"
+      {:error, reason} ->
+        raise "failed to listen on port #{@port}, reason: #{inspect(reason)}"
     end
   end
 

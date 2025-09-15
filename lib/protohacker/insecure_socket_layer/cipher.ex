@@ -113,4 +113,15 @@ defmodule Protohacker.InsecureSocketLayer.Cipher do
       {:add_pos}, acc -> add_pos(acc)
     end)
   end
+
+  # The server must apply the inverse of the cipher spec to decode the request stream.
+  def decode_message(message, ciphers) do
+    message
+    |> apply_cipher(ciphers |> Enum.reverse())
+  end
+
+  def encode_message(message, ciphers) do
+    message
+    |> apply_cipher(ciphers)
+  end
 end

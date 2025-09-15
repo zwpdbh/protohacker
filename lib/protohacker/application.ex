@@ -24,7 +24,8 @@ defmodule Protohacker.Application do
       # Protohacker.SpeedDaemon
       Protohacker.SpeedDaemon.Supervisor,
       Protohacker.LineReversal.Supervisor,
-      Protohacker.LineReversalV2.Supervisor
+      Protohacker.LineReversalV2.Supervisor,
+      Protohacker.InsecureSocketLayer.Supervisor
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
