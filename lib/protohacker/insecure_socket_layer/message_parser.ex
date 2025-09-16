@@ -1,4 +1,54 @@
 defmodule Protohacker.InsecureSocketLayer.MessageParser do
+  import NimbleParsec
+
+  toy_number =
+    ignore(ascii_string([?\s], min: 0))
+    |> integer(min: 1)
+    |> ignore(string("x"))
+
+  word = ascii_string([?a..?z, ?A..?Z], min: 1)
+
+  toy_item =
+    word
+    |> repeat(
+      ignore(ascii_string([?\s], min: 1))
+      |> concat(word)
+    )
+    |> reduce({:join_words, []})
+
+  toy_order =
+    toy_number
+    # space after "x"
+    |> ignore(string(" "))
+    |> concat(toy_item)
+    |> reduce({:make_toy_entry, []})
+
+  # optional whitespace before
+  comma_separator =
+    ignore(ascii_string([?\s], min: 0))
+    |> ignore(string(","))
+    # optional whitespace after
+    |> ignore(ascii_string([?\s], min: 0))
+
+  toy_order_list =
+    toy_order
+    |> repeat(
+      comma_separator
+      |> concat(toy_order)
+    )
+    |> ignore(ascii_string([?\s], min: 0))
+
+  defparsec(:parse_toy_order_list, toy_order_list)
+
+  defp join_words([first | rest]) do
+    [first | rest]
+    |> Enum.join(" ")
+  end
+
+  defp make_toy_entry([count, name]) do
+    {count, name}
+  end
+
   @doc """
   Parses a toy request line and returns the toy with the highest copy count.
 
@@ -13,26 +63,21 @@ defmodule Protohacker.InsecureSocketLayer.MessageParser do
       iex> Parser.find_max_toy("999x rare item")
       "999x rare item"
   """
+
   def find_max_toy(line) do
-    line
-    |> String.split(",", trim: true)
-    |> Enum.map(&parse_toy_entry/1)
-    |> Enum.max_by(fn {count, _name} -> count end)
-    |> format_toy_entry()
-  end
+    case line |> parse_toy_order_list do
+      {:ok, entries, "" = _rest, %{}, _line, _column} ->
+        entries
+        |> Enum.max_by(fn {count, _name} -> count end)
+        |> format_toy_entry()
 
-  # Parse a single entry like "10x toy car" → {10, "toy car"}
-  defp parse_toy_entry(entry) do
-    case Regex.run(~r/^(\d+)x\s+(.+)$/, entry, capture: :all_but_first) do
-      [count_str, name] ->
-        {String.to_integer(count_str), name}
+      {:error, reason, rest, _context, line, column} ->
+        reason |> dbg()
 
-      nil ->
-        raise "Invalid toy entry: #{entry}"
+        raise "Parse error at #{inspect(line)}:#{column} - #{inspect(reason)}, remaining: #{inspect(rest)}"
     end
   end
 
-  # Format back to "Nx name"
   defp format_toy_entry({count, name}) do
     "#{count}x #{name}"
   end
