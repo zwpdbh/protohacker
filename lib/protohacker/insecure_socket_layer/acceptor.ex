@@ -4,6 +4,10 @@ defmodule Protohacker.InsecureSocketLayer.Acceptor do
 
   @port 5008
 
+  def port do
+    @port
+  end
+
   def start_link([] = _opts) do
     Task.start_link(__MODULE__, :run, [:no_args])
   end
@@ -29,7 +33,7 @@ defmodule Protohacker.InsecureSocketLayer.Acceptor do
 
       {:ok, socket} ->
         Protohacker.InsecureSocketLayer.ConnectionSupervisor.start_child(socket)
-        accept_loop(socket)
+        accept_loop(listen_socket)
     end
   end
 end
