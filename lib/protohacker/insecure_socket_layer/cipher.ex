@@ -1,3 +1,10 @@
+# Lesson learned:
+# Instead of: Multiple functions that operate on entire binaries
+# It is better to create one interface function to process binary in which
+# we use Enum.reduce to apply serveral functions operate on single byte.
+# Ask: "How can I compose simple functions?" rather than "What steps do I need?"
+# Ask: "How to handle data in stream processing instead of bulk processing?"
+
 defmodule Protohacker.InsecureSocketLayer.Cipher do
   # Reverse the order of bits in the byte, so the least-significant bit becomes
   # the most-significant bit, the 2nd-least-significant becomes the 2nd-most-significant, and so on.
