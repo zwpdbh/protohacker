@@ -351,4 +351,19 @@ defmodule Protohacker.InsecureSocketLayer.CipherTest do
       assert Cipher.no_op_ciphers?([{:add_n, 200}, {:add_n, 56}]) == true
     end
   end
+
+  describe "Example session test" do
+    test "parses xor(123), addpos, reversebits" do
+      data = <<0x02, 0x7B, 0x05, 0x01, 0x00>>
+
+      assert {:ok, "",
+              [
+                {:xor_n, 123},
+                {:add_pos},
+                {:reversebits}
+              ] = ciphers} = Cipher.parse_cipher_spec(data)
+
+      assert Cipher.no_op_ciphers?(ciphers) == false
+    end
+  end
 end

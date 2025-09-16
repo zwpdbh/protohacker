@@ -22,7 +22,9 @@ defmodule Protohacker.InsecureSocketLayer.Connection do
   # When there is no ciphers, the first message from client is a cipher spec
   @impl true
   def handle_info({:tcp, socket, data}, %__MODULE__{socket: socket, ciphers: []} = state) do
-    :ok = :inet.setopts(socket, active: :once)
+    # :ok = :inet.setopts(socket, active: :once)
+
+    data |> dbg()
 
     with {:ok, rest, ciphers} <- Cipher.parse_cipher_spec(data),
          false <- Cipher.no_op_ciphers?(ciphers) do
@@ -32,14 +34,14 @@ defmodule Protohacker.InsecureSocketLayer.Connection do
     else
       error ->
         Logger.warning("there is error when client specify ciphers, error: #{inspect(error)}")
-        {:stop, :norml}
+        {:stop, :normal}
     end
   end
 
   @impl true
   def handle_info({:tcp, socket, data}, %__MODULE__{socket: socket, ciphers: ciphers} = state)
       when length(ciphers) > 0 do
-    :ok = :inet.setopts(socket, active: :once)
+    # :ok = :inet.setopts(socket, active: :once)
 
     # use ciphers to decode the message
     message = Cipher.decode_message(data, state.ciphers)
@@ -50,13 +52,22 @@ defmodule Protohacker.InsecureSocketLayer.Connection do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info({:tcp_error, socket, reason}, %__MODULE__{socket: socket} = state) do
     Logger.error("Connection closed because of error: #{inspect(reason)}")
     {:stop, :normal, state}
   end
 
+  @impl true
   def handle_info({:tcp_closed, socket}, %__MODULE__{socket: socket} = state) do
     Logger.debug("Connection closed by client")
     {:stop, :normal, state}
+  end
+
+  @impl true
+  def terminate(reason, state) do
+    dbg(reason)
+    dbg(state)
+    :ok
   end
 end

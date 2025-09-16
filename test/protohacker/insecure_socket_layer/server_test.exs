@@ -3,7 +3,7 @@ defmodule Protohacker.InsecureSocketLayer.ServerTest do
   @port Protohacker.InsecureSocketLayer.Acceptor.port()
 
   test "example session from the problem description" do
-    {:ok, client} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+    {:ok, client} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true, packet: :line])
 
     :ok = :gen_tcp.send(client, <<0x02, 0x7B, 0x05, 0x01, 0x00>>)
 
@@ -26,7 +26,7 @@ defmodule Protohacker.InsecureSocketLayer.ServerTest do
 
   @tag :capture_log
   test "no-op ciphers result in the client being disconnected" do
-    {:ok, client} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true])
+    {:ok, client} = :gen_tcp.connect(~c"localhost", @port, [:binary, active: true, packet: :line])
 
     # Cipher spec from the problem description
     :ok = :gen_tcp.send(client, <<0x02, 0xA0, 0x02, 0x0B, 0x02, 0xAB, 0x00>>)
