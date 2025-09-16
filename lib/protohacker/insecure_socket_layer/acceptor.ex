@@ -16,9 +16,8 @@ defmodule Protohacker.InsecureSocketLayer.Acceptor do
     listen_options =
       [
         mode: :binary,
-        active: true,
-        reuseaddr: true,
-        packet: :line
+        active: :once,
+        reuseaddr: true
       ]
 
     case :gen_tcp.listen(@port, listen_options) do
