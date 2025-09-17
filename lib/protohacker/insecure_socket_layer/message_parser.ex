@@ -64,17 +64,22 @@ defmodule Protohacker.InsecureSocketLayer.MessageParser do
       "999x rare item"
   """
 
+  @spec find_max_toy(binary()) :: {:ok, binary()} | {:error, term()}
   def find_max_toy(line) do
     case line |> parse_toy_order_list do
       {:ok, entries, "" = _rest, %{}, _line, _column} ->
-        entries
-        |> Enum.max_by(fn {count, _name} -> count end)
-        |> format_toy_entry()
+        max_topy =
+          entries
+          |> Enum.max_by(fn {count, _name} -> count end)
+          |> format_toy_entry()
+
+        {:ok, max_topy}
 
       {:error, reason, rest, _context, line, column} ->
         reason |> dbg()
 
-        raise "Parse error at #{inspect(line)}:#{column} - #{inspect(reason)}, remaining: #{inspect(rest)}"
+        {:error,
+         "Parse error at #{inspect(line)}:#{column} - #{inspect(reason)}, remaining: #{inspect(rest)}"}
     end
   end
 

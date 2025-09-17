@@ -6,13 +6,50 @@
 # Ask: "How to handle data in stream processing instead of bulk processing?"
 
 defmodule Protohacker.InsecureSocketLayer.Cipher do
+  @type cipher() ::
+          :reversebits
+          | {:xor, byte()}
+          | :xorpos
+          | {:add, byte()}
+          | :addpos
+          | {:sub, byte()}
+          | :subpos
+
+  @type ciphers() :: [cipher()]
+
+  @spec apply(binary(), ciphers(), non_neg_integer()) :: binary()
+  def apply(data, ciphers, start_position \\ 0) when is_binary(data) do
+    {encoded, _postion} =
+      for <<byte <- data>>, reduce: {_acc = <<>>, start_position} do
+        {acc, position} ->
+          encoded =
+            Enum.reduce(ciphers, byte, &apply_operation(&1, &2, position))
+
+          {<<acc::binary, encoded>>, position + 1}
+      end
+
+    encoded
+  end
+
+  # apply one cipher on one byte
+  @spec apply_operation(cipher(), byte(), non_neg_integer()) :: byte()
+  defp apply_operation(:reversebits, byte, _index), do: reversebits(byte)
+  defp apply_operation({:xor, n}, byte, _index), do: xor_n(byte, n)
+  defp apply_operation(:xorpos, byte, pos), do: xor_pos(byte, pos)
+  defp apply_operation({:add, n}, byte, _index), do: add_n(byte, n)
+  defp apply_operation(:addpos, byte, pos), do: add_pos(byte, pos)
+  defp apply_operation({:sub, n}, byte, _index), do: sub(byte, n)
+  defp apply_operation(:subpos, byte, pos), do: sub_pos(byte, pos)
+
   # Reverse the order of bits in the byte, so the least-significant bit becomes
   # the most-significant bit, the 2nd-least-significant becomes the 2nd-most-significant, and so on.
-  def reversebits(data) when is_binary(data) do
-    for <<byte <- data>>, into: <<>> do
-      <<b7::1, b6::1, b5::1, b4::1, b3::1, b2::1, b1::1, b0::1>> = <<byte>>
-      <<b0::1, b1::1, b2::1, b3::1, b4::1, b5::1, b6::1, b7::1>>
-    end
+  @spec reversebits(byte()) :: byte()
+  def reversebits(byte) do
+    <<b7::1, b6::1, b5::1, b4::1, b3::1, b2::1, b1::1, b0::1>> = <<byte>>
+    # notice <<reserved>> and reserved represent the same underlying byte, but not the same
+    # elixir value
+    <<reversed>> = <<b0::1, b1::1, b2::1, b3::1, b4::1, b5::1, b6::1, b7::1>>
+    reversed
   end
 
   # XOR means "eXclusive OR".
@@ -21,125 +58,117 @@ defmodule Protohacker.InsecureSocketLayer.Cipher do
   # 0 is a valid value for n.
   # For example, if n is 1, then input hex "68 65 6c 6c 6f"
   # becomes "69 64 6d 6d 6e"
-  def xor_n(data, n) when is_binary(data) and is_integer(n) and n >= 0 and n <= 255 do
-    for <<byte <- data>>, into: <<>> do
-      <<Bitwise.bxor(byte, n)>>
-    end
+  @spec xor_n(byte(), non_neg_integer()) :: byte()
+  def xor_n(byte, n) do
+    Bitwise.bxor(byte, n)
   end
 
   # XOR the byte by its position in the stream, starting from 0.
-  def xor_pos(data, start_pos \\ 0) when is_binary(data) do
-    xor_pos(data, start_pos, _index = 0, _acc = <<>>)
+  @spec xor_pos(byte(), non_neg_integer()) :: byte()
+  def xor_pos(byte, pos) do
+    Bitwise.bxor(byte, pos)
   end
 
-  defp xor_pos(<<>>, _start_pos, _index, acc), do: acc
-
-  defp xor_pos(<<byte, rest::binary>>, start_pos, index, acc) do
-    new_byte = Bitwise.bxor(byte, start_pos + index)
-    xor_pos(rest, start_pos, index + 1, <<acc::binary, new_byte>>)
-  end
-
-  # Add N to the byte, modulo 256. Note that 0 is a valid value for N, and addition wraps, so that 255+1=0, 255+2=1, and so on.
-  def add_n(data, n) when is_binary(data) and is_integer(n) and n >= 0 and n <= 256 do
-    for <<byte <- data>>, into: <<>> do
-      # Use `rem` to compute (byte + n) mod 256
-      # Since byte + n is non-negative, `rem` behaves like mathematical modulo
-      result = rem(byte + n, 256)
-      <<result>>
-    end
+  @spec add_n(byte(), non_neg_integer()) :: byte()
+  def add_n(byte, n) do
+    rem(byte + n, 256)
   end
 
   # Add the position in the stream to the byte, modulo 256,
   # starting from 0. Addition wraps, so that 255+1=0, 255+2=1, and so on.
-  def add_pos(data, start_pos \\ 0) when is_binary(data) do
-    data
-    |> :binary.bin_to_list()
-    |> Enum.with_index()
-    |> Enum.map(fn {byte, index} -> rem(byte + start_pos + index, 256) end)
-    |> :binary.list_to_bin()
+
+  @spec add_pos(byte(), non_neg_integer()) :: byte()
+  def add_pos(byte, pos) do
+    rem(byte + pos, 256)
   end
 
-  # Add subtract_pos for decoding add_pos operations
-  def subtract_pos(data, start_pos \\ 0)
-      when is_binary(data) and is_integer(start_pos) and start_pos >= 0 do
-    data
-    |> :binary.bin_to_list()
-    |> Enum.with_index()
-    |> Enum.map(fn {byte, index} -> rem(byte - (start_pos + index) + 256, 256) end)
-    |> :binary.list_to_bin()
+  @spec sub(byte(), non_neg_integer()) :: byte()
+  def sub(byte, n) do
+    rem(byte - n, 256)
+  end
+
+  @spec sub_pos(byte(), non_neg_integer()) :: byte()
+  def sub_pos(byte, pos) do
+    rem(byte - pos, 256)
   end
 
   # parse cipher specs
-  def parse_cipher_spec(binary) do
-    parse_cipher_spec_aux(binary, _acc = [])
+  @spec parse_cipher_spec(binary()) :: {:ok, ciphers(), binary()} | :error
+  def parse_cipher_spec(binary) when is_binary(binary) do
+    parse_cipher_spec(binary, _acc = [])
   end
 
-  # means reach the end of cipher spec
-  defp parse_cipher_spec_aux(<<0x00, rest::binary>>, acc) do
-    {:ok, rest, acc |> Enum.reverse()}
+  defp parse_cipher_spec(<<0x00, rest::binary>>, acc), do: {:ok, acc |> Enum.reverse(), rest}
+
+  defp parse_cipher_spec(<<0x01, rest::binary>>, acc),
+    do: parse_cipher_spec(rest, [:reversebits] ++ acc)
+
+  defp parse_cipher_spec(<<0x02, n, rest::binary>>, acc),
+    do: parse_cipher_spec(rest, [{:xor, n}] ++ acc)
+
+  defp parse_cipher_spec(<<0x03, rest::binary>>, acc),
+    do: parse_cipher_spec(rest, [:xorpos] ++ acc)
+
+  defp parse_cipher_spec(<<0x04, n, rest::binary>>, acc),
+    do: parse_cipher_spec(rest, [{:add, n}] ++ acc)
+
+  defp parse_cipher_spec(<<0x05, rest::binary>>, acc),
+    do: parse_cipher_spec(rest, [:addpos] ++ acc)
+
+  defp parse_cipher_spec(_other, _accacc), do: :error
+
+  @spec reverse_ciphers(ciphers()) :: ciphers()
+  def reverse_ciphers(ciphers) do
+    ciphers
+    |> Enum.reverse()
+    |> Enum.map(&apply_reversed_cipher(&1))
   end
 
-  defp parse_cipher_spec_aux(<<0x01, rest::binary>>, acc) do
-    parse_cipher_spec_aux(rest, [{:reversebits}] ++ acc)
+  @spec apply_reversed_cipher(cipher()) :: cipher()
+  defp apply_reversed_cipher(:addpos), do: :subpos
+  defp apply_reversed_cipher({:add, n}), do: {:sub, n}
+  defp apply_reversed_cipher(other), do: other
+
+  @spec no_op_ciphers?(ciphers()) :: boolean()
+  def no_op_ciphers?(ciphers) do
+    # Process ciphers to determine if they result in no-op
+    {net_xor, net_add, reverse_count} =
+      Enum.reduce(ciphers, {0, 0, 0}, &reduce_cipher/2)
+
+    # Normalize add to handle negative values properly
+    normalized_add = rem(rem(net_add, 256) + 256, 256)
+
+    # Check if all operations cancel out:
+    # - XOR operations combine via XOR (xor with 0 = no change)
+    # - ADD/SUB operations combine via addition (add 0 = no change)
+    # - REVERSEBITS operations cancel in pairs
+    net_xor == 0 and normalized_add == 0 and rem(reverse_count, 2) == 0
   end
 
-  defp parse_cipher_spec_aux(<<0x02, n, rest::binary>>, acc) do
-    parse_cipher_spec_aux(rest, [{:xor_n, n}] ++ acc)
-  end
+  defp reduce_cipher(cipher, {xor_acc, add_acc, rev_count}) do
+    case cipher do
+      :reversebits ->
+        {xor_acc, add_acc, rev_count + 1}
 
-  defp parse_cipher_spec_aux(<<0x03, rest::binary>>, acc) do
-    parse_cipher_spec_aux(rest, [{:xor_pos}] ++ acc)
-  end
+      {:xor, n} ->
+        {Bitwise.bxor(xor_acc, n), add_acc, rev_count}
 
-  defp parse_cipher_spec_aux(<<0x04, n, rest::binary>>, acc) do
-    parse_cipher_spec_aux(rest, [{:add_n, n}] ++ acc)
-  end
+      :xorpos ->
+        # Position-dependent operations can't be statically determined as no-op
+        # So we mark it as having effect
+        {1, add_acc, rev_count}
 
-  defp parse_cipher_spec_aux(<<0x05, rest::binary>>, acc) do
-    parse_cipher_spec_aux(rest, [{:add_pos}] ++ acc)
-  end
+      {:add, n} ->
+        {xor_acc, add_acc + n, rev_count}
 
-  defp parse_cipher_spec_aux(binary, acc) do
-    {:error, binary, acc}
-  end
+      :addpos ->
+        {xor_acc, 1, rev_count}
 
-  # Returns true if cipher leaves EVERY byte unchanged → must reject.
-  def no_op_ciphers?(ciphers) when is_list(ciphers) do
-    # If any op is position-dependent, it's NOT a pure no-op → safe
-    if Enum.any?(ciphers, &(match?({:xor_pos}, &1) or match?({:add_pos}, &1))) do
-      false
-    else
-      # Create binary with all 256 bytes: 0, 1, 2, ..., 255
-      input = for b <- 0..255, into: <<>>, do: <<b>>
+      {:sub, n} ->
+        {xor_acc, add_acc - n, rev_count}
 
-      # Apply cipher to entire binary
-      output = apply_cipher(input, ciphers)
-
-      # If unchanged → no-op
-      input == output
+      :subpos ->
+        {xor_acc, 1, rev_count}
     end
-  end
-
-  # Apply a list of ciphers to a binary
-  def apply_cipher(data, operations, start_pos \\ 0)
-      when is_binary(data) and is_integer(start_pos) do
-    Enum.reduce(operations, {data, start_pos}, fn
-      {:reversebits}, {acc, pos} -> {reversebits(acc), pos}
-      {:xor_n, n}, {acc, pos} -> {xor_n(acc, n), pos}
-      {:xor_pos}, {acc, pos} -> {xor_pos(acc, pos), pos + byte_size(acc)}
-      {:add_n, n}, {acc, pos} -> {add_n(acc, n), pos}
-      {:add_pos}, {acc, pos} -> {add_pos(acc, pos), pos + byte_size(acc)}
-    end)
-  end
-
-  # The server must apply the inverse of the cipher spec to decode the request stream.
-  def decode_message(message, ciphers, start_pos) do
-    message
-    |> apply_cipher(ciphers |> Enum.reverse(), start_pos)
-  end
-
-  def encode_message(message, ciphers, start_pos) do
-    message
-    |> apply_cipher(ciphers, start_pos)
   end
 end
