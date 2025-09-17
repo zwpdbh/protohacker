@@ -103,7 +103,7 @@ defmodule Protohacker.InsecureSocketLayer.Connection do
 
         handle_decrypted_data(state)
 
-      # recursively will always hit this condition
+      # recursively split line will always hit this condition
       [_buffer] ->
         {:noreply, state}
     end
