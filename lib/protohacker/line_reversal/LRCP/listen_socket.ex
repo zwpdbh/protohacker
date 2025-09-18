@@ -88,7 +88,6 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
       {:empty, state} ->
         updated_state =
           update_in(state.accept_queue, fn q ->
-            from |> dbg()
             :queue.in(from, q)
           end)
 
