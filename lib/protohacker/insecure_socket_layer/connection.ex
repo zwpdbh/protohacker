@@ -1,6 +1,7 @@
 defmodule Protohacker.InsecureSocketLayer.Connection do
-  alias Protohacker.InsecureSocketLayer.MessageParser
+  @moduledoc false
   alias Protohacker.InsecureSocketLayer.Cipher
+  alias Protohacker.InsecureSocketLayer.MessageParser
   use GenServer, restart: :temporary
   require Logger
   # alias Protohacker.InsecureSocketLayer.MessageParser
@@ -65,8 +66,7 @@ defmodule Protohacker.InsecureSocketLayer.Connection do
   end
 
   @impl true
-  def handle_info({:tcp, socket, data}, %__MODULE__{socket: socket, ciphers: ciphers} = state)
-      when length(ciphers) > 0 do
+  def handle_info({:tcp, socket, data}, %__MODULE__{socket: socket, ciphers: [_ | _]} = state) do
     :ok = :inet.setopts(socket, active: :once)
 
     state = update_in(state.encrypted_buffer, &(&1 <> data))

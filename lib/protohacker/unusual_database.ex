@@ -1,4 +1,5 @@
 defmodule Protohacker.UnusualDatabase do
+  @moduledoc false
   require Logger
   use GenServer
 

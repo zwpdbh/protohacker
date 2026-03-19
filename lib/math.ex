@@ -1,4 +1,5 @@
 defmodule Math do
+  @moduledoc false
   @doc """
   Checks if a number n is prime.
 

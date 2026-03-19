@@ -1,4 +1,5 @@
 defmodule Protohacker.LineReversal.LRCP.ListenSocket do
+  @moduledoc false
   use GenServer
   require Logger
   alias Protohacker.LineReversal.LRCP
@@ -52,8 +53,10 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
       # Dequeue is done when a client sends /connect/session_id/
       accept_queue: :queue.new(),
       # A queue of already-created LRCP.Sockets (sessions) that are waiting to be accepted.
-      # Enqueued when a /connect/../ packet arrives, and a LRCP.Socket is spawned, but no one is currently waiting in accept_queue.
-      # In other words, the socket is pre-created and waiting to be picked up by the next LRCP.accept() call.
+      # Enqueued when a /connect/../ packet arrives, and a LRCP.Socket is spawned,
+      # but no one is currently waiting in accept_queue.
+      # In other words, the socket is pre-created and waiting to be picked up
+      # by the next LRCP.accept() call.
       # Dequeued when some one calls LRCP.accept() and there is socket waiting.
       ready_sockets: :queue.new()
     ]
@@ -117,23 +120,7 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
     case DynamicSupervisor.start_child(state.supervisor, spec) do
       {:ok, socket_pid} ->
         socket = %LRCP.Socket{pid: socket_pid}
-
-        case get_and_update_in(state.accept_queue, fn q -> :queue.out(q) end) do
-          {{:value, from}, state} ->
-            # REVIEW the usage of GenServer.reply
-            GenServer.reply(from, {:ok, socket})
-            {:noreply, state}
-
-          {:empty, state} ->
-            state =
-              update_in(state.ready_sockets, fn q ->
-                socket |> dbg()
-
-                :queue.in(socket, q)
-              end)
-
-            {:noreply, state}
-        end
+        handle_socket_accepted(state, socket)
 
       {:error, {:already_started, _pid}} ->
         :ok = LRCP.Socket.resend_connect_ack(%__MODULE__{pid: self()}, session_id)
@@ -159,6 +146,18 @@ defmodule Protohacker.LineReversal.LRCP.ListenSocket do
     end
 
     {:noreply, state}
+  end
+
+  defp handle_socket_accepted(state, socket) do
+    case get_and_update_in(state.accept_queue, fn q -> :queue.out(q) end) do
+      {{:value, from}, state} ->
+        GenServer.reply(from, {:ok, socket})
+        {:noreply, state}
+
+      {:empty, state} ->
+        state = update_in(state.ready_sockets, fn q -> :queue.in(socket, q) end)
+        {:noreply, state}
+    end
   end
 
   defp send_close(state, ip, port, session_id) do

@@ -4,6 +4,7 @@ defmodule Protohacker.BudgetChat do
   """
   require Logger
 
+  alias Protohacker.BudgetChat.Common
   use GenServer
 
   @port 3007
@@ -68,7 +69,7 @@ defmodule Protohacker.BudgetChat do
       {:error, reason} ->
         Logger.error("Accept error: #{inspect(reason)}")
         # Don't crash; maybe terminate if it's a fatal error
-        if reason not in [:closed, :einval], do: :timer.sleep(100), else: exit(:shutdown)
+        if reason in [:closed, :einval], do: exit(:shutdown), else: :timer.sleep(100)
     end
 
     # Loop back — accept next connection
@@ -134,7 +135,7 @@ defmodule Protohacker.BudgetChat do
     # detect if the message is end with new line, otherwise, add it.
     GenServer.cast(
       __MODULE__,
-      {:broadcast, Protohacker.BudgetChat.Common.ensure_newline(message), from_name, from_pid}
+      {:broadcast, Common.ensure_newline(message), from_name, from_pid}
     )
   end
 end

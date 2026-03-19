@@ -52,35 +52,42 @@ defmodule Protohacker.MeansToEnd do
   defp handle_connection_loop(socket, records) do
     case :gen_tcp.recv(socket, 9) do
       {:ok, packet} ->
-        case process_packet_to_command(packet) do
-          {:query, timestamp_start, timestamp_end} ->
-            :send_back
-            mean = compute_mean_from_records(records, {timestamp_start, timestamp_end})
-
-            case :gen_tcp.send(socket, <<mean::32>>) do
-              :ok ->
-                handle_connection_loop(socket, records)
-
-              {:error, reason} ->
-                Logger.error(" #{__MODULE__} :gen_tcp.send error: #{inspect(reason)}")
-                :gen_tcp.close(socket)
-                :ok
-            end
-
-          {:insert, timestamp, new_record} ->
-            updated_records = :gb_trees.insert(timestamp, new_record, records)
-            handle_connection_loop(socket, updated_records)
-
-          {:error, :bad_format} ->
-            :gen_tcp.close(socket)
-            :ok
-        end
+        handle_packet(socket, records, packet)
 
       {:error, reason} ->
         Logger.debug(
           " #{__MODULE__} handle_connection_loop :gen_tcp.recv error: #{inspect(reason)} "
         )
 
+        :ok
+    end
+  end
+
+  defp handle_packet(socket, records, packet) do
+    case process_packet_to_command(packet) do
+      {:query, timestamp_start, timestamp_end} ->
+        handle_query(socket, records, timestamp_start, timestamp_end)
+
+      {:insert, timestamp, new_record} ->
+        updated_records = :gb_trees.insert(timestamp, new_record, records)
+        handle_connection_loop(socket, updated_records)
+
+      {:error, :bad_format} ->
+        :gen_tcp.close(socket)
+        :ok
+    end
+  end
+
+  defp handle_query(socket, records, timestamp_start, timestamp_end) do
+    mean = compute_mean_from_records(records, {timestamp_start, timestamp_end})
+
+    case :gen_tcp.send(socket, <<mean::32>>) do
+      :ok ->
+        handle_connection_loop(socket, records)
+
+      {:error, reason} ->
+        Logger.error(" #{__MODULE__} :gen_tcp.send error: #{inspect(reason)}")
+        :gen_tcp.close(socket)
         :ok
     end
   end

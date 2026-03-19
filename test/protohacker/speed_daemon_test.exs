@@ -4,10 +4,10 @@ defmodule Protohacker.SpeedDaemonTest do
   alias Protohacker.SpeedDaemon.Message
 
   alias Protohacker.SpeedDaemon.Message.{
-    Ticket,
-    Plate,
+    IAmCamera,
     IAmDispatcher,
-    IAmCamera
+    Plate,
+    Ticket
   }
 
   @host ~c"localhost"
@@ -58,7 +58,7 @@ defmodule Protohacker.SpeedDaemonTest do
              mile2: 4462,
              plate: "UK43PKD",
              road: 582,
-             speed: 12000,
+             speed: 12_000,
              timestamp1: 203_663,
              timestamp2: 203_963
            }
@@ -102,7 +102,7 @@ defmodule Protohacker.SpeedDaemonTest do
              mile2: 4462,
              plate: "IT43PRC",
              road: 582,
-             speed: 12000,
+             speed: 12_000,
              timestamp1: 203_663,
              timestamp2: 203_963
            }

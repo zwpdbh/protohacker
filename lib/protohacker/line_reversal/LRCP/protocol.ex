@@ -1,4 +1,5 @@
 defmodule Protohacker.LineReversal.LRCP.Protocol do
+  @moduledoc false
   @max_int 2_147_483_648
 
   @type session_id() :: integer()

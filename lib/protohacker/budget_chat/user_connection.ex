@@ -1,5 +1,7 @@
 defmodule Protohacker.BudgetChat.UserConnection do
+  @moduledoc false
   require Logger
+  alias Protohacker.BudgetChat.Common
   use GenServer
 
   defstruct [
@@ -147,10 +149,11 @@ defmodule Protohacker.BudgetChat.UserConnection do
   end
 
   defp send_message(socket, text) do
-    :gen_tcp.send(socket, Protohacker.BudgetChat.Common.ensure_newline(text))
+    :gen_tcp.send(socket, Common.ensure_newline(text))
   end
 
-  # which must contain at least 1 character, and must consist entirely of alphanumeric characters (uppercase, lowercase, and digits).
+  # which must contain at least 1 character, and must consist entirely of alphanumeric characters
+  # (uppercase, lowercase, and digits).
   defp check_user_name_valid?(name) when is_binary(name) do
     if String.length(name) >= 1 and String.match?(name, ~r/^[a-zA-Z0-9]+$/) do
       {:ok, name}

@@ -1,7 +1,8 @@
 defmodule Protohacker.SpeedDaemon.Connection do
+  @moduledoc false
   use GenServer, restart: :temporary
 
-  alias Protohacker.SpeedDaemon.{TicketManager, DispatchersRegistry, Message}
+  alias Protohacker.SpeedDaemon.{DispatchersRegistry, Message, TicketManager}
 
   require Logger
 
@@ -96,7 +97,7 @@ defmodule Protohacker.SpeedDaemon.Connection do
     {:error, "Plate messages are only accepted from cameras"}
   end
 
-  defp handle_message(state, %Message.WantHeartbeat{interval: interval}) do
+  defp handle_message(%__MODULE__{} = state, %Message.WantHeartbeat{interval: interval}) do
     interval_in_ms = interval * 100
 
     if state.heartbeat_ref do

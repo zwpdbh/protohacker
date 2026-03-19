@@ -8,7 +8,7 @@ config :protohacker,
 # Define a reusable formatter config
 config :logger, :default_formatter,
   format: "\n$time [$level] $metadata\n $message\n",
-  metadata: [:file, :line]
+  metadata: [:file, :line, :type, :road, :mile]
 
 # Tell the console backend to use it
 config :logger,

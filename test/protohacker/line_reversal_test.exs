@@ -1,6 +1,5 @@
 defmodule Protohacker.LineReversalTest do
   use ExUnit.Case, async: true
-  require Logger
   alias Protohacker.LineReversal.LRCP.Protocol
   @max_int 2_147_483_648
   @port 5006
@@ -166,6 +165,7 @@ defmodule Protohacker.LineReversalTest do
       assert udp_recv(client) == "/data/#{session_id}/0/\\/#{String.reverse("hello world!")}\n/"
     end
 
+    @tag :flaky
     test "multiple sessions in parallel" do
       tasks =
         for _ <- 1..20 do

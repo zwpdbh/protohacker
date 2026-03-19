@@ -1,4 +1,5 @@
 defmodule Protohacker.LineReversal.LRCP.Socket do
+  @moduledoc false
   use GenServer, restart: :temporary
 
   alias Protohacker.LineReversal.LRCP
@@ -77,6 +78,7 @@ defmodule Protohacker.LineReversal.LRCP.Socket do
   # ------------------------
 
   defmodule State do
+    @moduledoc false
     defstruct [
       :udp_socket,
       :peer_ip,

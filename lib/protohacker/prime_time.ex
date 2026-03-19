@@ -1,4 +1,5 @@
 defmodule Protohacker.PrimeTime do
+  @moduledoc false
   require Logger
   use GenServer
   @port 3003
@@ -106,7 +107,8 @@ defmodule Protohacker.PrimeTime do
 end
 
 defmodule Protohacker.PrimeTime.Play do
-  def run_is_prime() do
+  @moduledoc false
+  def run_is_prime do
     {:ok, socket} =
       :gen_tcp.connect(~c"135.237.56.239", 3002, mode: :binary, active: false)
 
@@ -119,7 +121,7 @@ defmodule Protohacker.PrimeTime.Play do
     |> Jason.decode!()
   end
 
-  def run_is_not_prime() do
+  def run_is_not_prime do
     # port = Protohacker.PrimeTime.port()
 
     {:ok, socket} =
@@ -134,7 +136,7 @@ defmodule Protohacker.PrimeTime.Play do
     |> Jason.decode()
   end
 
-  def run_example_01() do
+  def run_example_01 do
     input =
       "{\"number\":53473226,\"method\":\"isPrime\"}\n{\"number\":85285537,\"method\":\"isPrime\"}\n{\"number\":67157929,\"method\":\"isPrime\"}\n{\"method\":\"isPrime\",\"number\":96329491}\n{\"method\":\"isPrime\",\"number\":42457156}\n{\"number\":64124109,\"method\":\"isPrime\"}\n{\"method\":\"isPrime\",\"number\":1515031}\n{\"number\":61215697,\"method\":\"isPrime\"}\n{\"number\":13872304,\"method\":\"isPrime\"}\n{\"method\":\"isPrime\",\"number\":52233862}\n{\"number\":2951832,\"method\":\"isPrime\"}\n{\"method\":\"isPrime\",\"number\":82248559}\n{\"number\":98826439,\"method\":\"isPrime\"}\n{\"method\":\"isPrime\",\"number\":90663977}\n{\"number\":37330619,\"method\":\"isPrime\"}\n{\"number\":7745642,\"method\":\"isPrime\"}\n{\"number\":66787807,\"method\":\"isPrime\"}\n"
 
@@ -156,8 +158,6 @@ defmodule Protohacker.PrimeTime.Play do
     case :gen_tcp.recv(socket, 0, 5000) do
       {:ok, response} ->
         response |> Jason.decode()
-        response |> dbg()
-
         recv_loop(socket)
 
       {:error, :closed} ->

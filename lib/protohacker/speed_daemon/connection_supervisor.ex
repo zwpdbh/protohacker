@@ -1,4 +1,5 @@
 defmodule Protohacker.SpeedDaemon.ConnectionSupervisor do
+  @moduledoc false
   use DynamicSupervisor
 
   def start_link([] = _opts) do

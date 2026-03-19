@@ -6,6 +6,7 @@
 # Ask: "How to handle data in stream processing instead of bulk processing?"
 
 defmodule Protohacker.InsecureSocketLayer.Cipher do
+  @moduledoc false
   @type cipher() ::
           :reversebits
           | {:xor, byte()}

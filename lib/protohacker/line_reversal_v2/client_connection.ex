@@ -1,5 +1,7 @@
 defmodule Protohacker.LineReversalV2.ClientConnection do
+  @moduledoc false
   require Logger
+  alias Protohacker.LineReversalV2.UdpSocket
   use GenServer, restart: :temporary
 
   @idle_timeout 60_000
@@ -149,7 +151,7 @@ defmodule Protohacker.LineReversalV2.ClientConnection do
   end
 
   defp udp_send(%__MODULE__{ip: ip, port: port} = _state, data) do
-    Protohacker.LineReversalV2.UdpSocket.upd_send(ip, port, data)
+    UdpSocket.upd_send(ip, port, data)
   end
 
   defp escape_data(data) do

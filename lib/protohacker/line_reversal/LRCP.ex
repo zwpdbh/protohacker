@@ -1,4 +1,5 @@
 defmodule Protohacker.LineReversal.LRCP do
+  @moduledoc false
   alias Protohacker.LineReversal.LRCP.{ListenSocket, Socket}
 
   @type listen_socket() :: ListenSocket.t()

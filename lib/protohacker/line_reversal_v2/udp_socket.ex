@@ -1,7 +1,9 @@
 defmodule Protohacker.LineReversalV2.UdpSocket do
+  @moduledoc false
   require Logger
 
   alias Protohacker.LineReversal.LRCP
+  alias Protohacker.LineReversalV2.ConnectionSupervisor
   use GenServer
 
   @port 5007
@@ -74,7 +76,7 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   # helpers
   # ------------------------
   defp handle_message(%__MODULE__{} = state, ip, port, {:connect, session_id}) do
-    case Protohacker.LineReversalV2.ConnectionSupervisor.start_child(ip, port, session_id) do
+    case ConnectionSupervisor.start_child(ip, port, session_id) do
       {:ok, client_pid} ->
         GenServer.cast(client_pid, :connect)
         {:noreply, state}
@@ -93,11 +95,11 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   end
 
   defp handle_message(%__MODULE__{} = state, ip, port, {:close, session_id}) do
-    with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
-      GenServer.cast(client_pid, :close)
+    case find_client_connection(ip, port, session_id) do
+      {:ok, client_pid} ->
+        GenServer.cast(client_pid, :close)
+        {:noreply, state}
 
-      {:noreply, state}
-    else
       {:error, :no_associated_client} ->
         upd_send(ip, port, "/close/#{session_id}/")
         {:noreply, state}
@@ -105,10 +107,11 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   end
 
   defp handle_message(%__MODULE__{} = state, ip, port, {:data, session_id, pos, binary_data}) do
-    with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
-      GenServer.cast(client_pid, {:process_binary, pos, binary_data})
-      {:noreply, state}
-    else
+    case find_client_connection(ip, port, session_id) do
+      {:ok, client_pid} ->
+        GenServer.cast(client_pid, {:process_binary, pos, binary_data})
+        {:noreply, state}
+
       {:error, :no_associated_client} ->
         upd_send(ip, port, "/close/#{session_id}/")
         {:noreply, state}
@@ -116,10 +119,11 @@ defmodule Protohacker.LineReversalV2.UdpSocket do
   end
 
   defp handle_message(%__MODULE__{} = state, ip, port, {:ack, session_id, pos}) do
-    with {:ok, client_pid} <- find_client_connection(ip, port, session_id) do
-      GenServer.cast(client_pid, {:ack, pos})
-      {:noreply, state}
-    else
+    case find_client_connection(ip, port, session_id) do
+      {:ok, client_pid} ->
+        GenServer.cast(client_pid, {:ack, pos})
+        {:noreply, state}
+
       {:error, :no_associated_client} ->
         {:noreply, state}
     end

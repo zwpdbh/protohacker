@@ -1,33 +1,41 @@
 defmodule Protohacker.SpeedDaemon.Message do
+  @moduledoc false
   # Client -> server
 
   defmodule Plate do
+    @moduledoc false
     defstruct [:plate, :timestamp]
   end
 
   defmodule WantHeartbeat do
+    @moduledoc false
     defstruct [:interval]
   end
 
   defmodule IAmCamera do
+    @moduledoc false
     defstruct [:road, :mile, :limit]
   end
 
   defmodule IAmDispatcher do
+    @moduledoc false
     defstruct [:roads]
   end
 
   # Server -> client
 
   defmodule Error do
+    @moduledoc false
     defstruct [:message]
   end
 
   defmodule Ticket do
+    @moduledoc false
     defstruct [:plate, :road, :mile1, :timestamp1, :mile2, :timestamp2, :speed]
   end
 
   defmodule Heartbeat do
+    @moduledoc false
     defstruct []
   end
 

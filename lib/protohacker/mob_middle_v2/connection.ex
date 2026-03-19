@@ -1,4 +1,5 @@
 defmodule Protohacker.MobMiddleV2.Connection do
+  @moduledoc false
   require Logger
   use GenServer
 

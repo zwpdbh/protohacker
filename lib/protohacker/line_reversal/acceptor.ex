@@ -1,6 +1,6 @@
 defmodule Protohacker.LineReversal.Acceptor do
-  alias Protohacker.LineReversal.LRCP
-  require Logger
+  @moduledoc false
+  alias Protohacker.LineReversal.{Connection, LRCP}
   use Task, restart: :transient
 
   # @port 5006
@@ -26,7 +26,7 @@ defmodule Protohacker.LineReversal.Acceptor do
     # We keep call :accept on GenServer listen_socket
     case LRCP.accept(listen_socket) do
       {:ok, %LRCP.Socket{} = socket} ->
-        {:ok, handler} = Protohacker.LineReversal.Connection.start_link(socket)
+        {:ok, handler} = Connection.start_link(socket)
         :ok = LRCP.controlling_process(socket, handler)
 
         accept_loop(listen_socket)

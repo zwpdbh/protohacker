@@ -8,19 +8,19 @@ defmodule Protohacker.MeansToEndTest do
 
       try do
         # Insert: I 12345 101
-        :gen_tcp.send(socket, <<?I, 12345::big-32, 101::big-32>>)
+        :gen_tcp.send(socket, <<?I, 12_345::big-32, 101::big-32>>)
 
         # Insert: I 12346 102
-        :gen_tcp.send(socket, <<?I, 12346::big-32, 102::big-32>>)
+        :gen_tcp.send(socket, <<?I, 12_346::big-32, 102::big-32>>)
 
         # Insert: I 12347 100
-        :gen_tcp.send(socket, <<?I, 12347::big-32, 100::big-32>>)
+        :gen_tcp.send(socket, <<?I, 12_347::big-32, 100::big-32>>)
 
         # Insert: I 40960 5
-        :gen_tcp.send(socket, <<?I, 40960::big-32, 5::big-32>>)
+        :gen_tcp.send(socket, <<?I, 40_960::big-32, 5::big-32>>)
 
         # Query: Q 12288 16384  => should include first 3 records (12345, 12346, 12347)
-        :gen_tcp.send(socket, <<?Q, 12288::big-32, 16384::big-32>>)
+        :gen_tcp.send(socket, <<?Q, 12_288::big-32, 16_384::big-32>>)
 
         # Receive exactly 4 bytes (int32 response)
         {:ok, <<mean::signed-big-32>>} = :gen_tcp.recv(socket, 4)

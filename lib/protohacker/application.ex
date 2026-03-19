@@ -9,7 +9,7 @@ defmodule Protohacker.Application do
   def start(_type, _args) do
     # Fetch config at startup
     server = Application.get_env(:protohacker, :budget_chat_server, ~c"chat.protohackers.com")
-    port = Application.get_env(:protohacker, :budget_chat_server_port, 16963)
+    port = Application.get_env(:protohacker, :budget_chat_server_port, 16_963)
 
     children = [
       # Starts a worker by calling: Protohacker.Worker.start_link(arg)

@@ -1,4 +1,5 @@
 defmodule Protohacker.InsecureSocketLayer.MessageParser do
+  @moduledoc false
   import NimbleParsec
 
   toy_number =
@@ -76,8 +77,6 @@ defmodule Protohacker.InsecureSocketLayer.MessageParser do
         {:ok, max_topy}
 
       {:error, reason, rest, _context, line, column} ->
-        reason |> dbg()
-
         {:error,
          "Parse error at #{inspect(line)}:#{column} - #{inspect(reason)}, remaining: #{inspect(rest)}"}
     end

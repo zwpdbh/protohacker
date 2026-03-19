@@ -9,10 +9,12 @@ defmodule Protohacker.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       releases: releases(),
-      config_path: "config/config.exs"
-      # aliases: [
-      #   test: ["test --trace"]
-      # ]
+      config_path: "config/config.exs",
+      aliases: aliases(),
+      dialyzer: [
+        ignore_warnings: "dialyzer.ignore-warnings.exs",
+        plt_add_apps: [:mix]
+      ]
     ]
   end
 
@@ -24,6 +26,12 @@ defmodule Protohacker.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [precommit: :test]
+    ]
+  end
+
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
@@ -31,7 +39,31 @@ defmodule Protohacker.MixProject do
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
       {:jason, "~> 1.4"},
       {:phoenix, "~> 1.8.0"},
-      {:nimble_parsec, "~> 1.4"}
+      {:nimble_parsec, "~> 1.4"},
+
+      # Dev and test dependencies
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  # Aliases are shortcuts or tasks specific to the current project.
+  defp aliases do
+    [
+      setup: ["deps.get"],
+      test: ["test"],
+      precommit: [
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "format --check-formatted",
+        "test --exclude flaky",
+        "dialyzer.check",
+        "credo --strict"
+      ],
+      "dialyzer.check": ["dialyzer --format dialyxir"],
+      "dialyzer.setup": ["dialyzer --plt"],
+      "credo.check": ["credo --strict"],
+      "code.quality": ["format", "dialyzer.check", "credo --strict"]
     ]
   end
 

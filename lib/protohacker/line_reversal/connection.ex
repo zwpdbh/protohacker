@@ -1,4 +1,5 @@
 defmodule Protohacker.LineReversal.Connection do
+  @moduledoc false
   alias Protohacker.LineReversal.LRCP
 
   require Logger

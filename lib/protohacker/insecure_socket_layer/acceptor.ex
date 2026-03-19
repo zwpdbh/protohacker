@@ -1,4 +1,6 @@
 defmodule Protohacker.InsecureSocketLayer.Acceptor do
+  @moduledoc false
+  alias Protohacker.InsecureSocketLayer.ConnectionSupervisor
   require Logger
   use Task, restart: :transient
 
@@ -36,7 +38,7 @@ defmodule Protohacker.InsecureSocketLayer.Acceptor do
         raise "failed to accept connectio, reason: #{inspect(reason)}"
 
       {:ok, socket} ->
-        Protohacker.InsecureSocketLayer.ConnectionSupervisor.start_child(socket)
+        ConnectionSupervisor.start_child(socket)
         accept_loop(listen_socket)
     end
   end

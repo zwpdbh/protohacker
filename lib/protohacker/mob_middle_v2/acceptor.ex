@@ -1,4 +1,7 @@
 defmodule Protohacker.MobMiddleV2.Acceptor do
+  @moduledoc false
+  alias Protohacker.MobMiddle
+  alias Protohacker.MobMiddleV2.ConnectionSupervisor
   use Task, restart: :transient
 
   def start_lin([] = _opts) do
@@ -6,7 +9,7 @@ defmodule Protohacker.MobMiddleV2.Acceptor do
   end
 
   def run do
-    case :gen_tcp.listen(Protohacker.MobMiddle.port(), [
+    case :gen_tcp.listen(MobMiddle.port(), [
            :binary,
            ifaddr: {0, 0, 0, 0},
            active: :once,
@@ -16,14 +19,14 @@ defmodule Protohacker.MobMiddleV2.Acceptor do
         accept_loop(listen_socket)
 
       {:error, reason} ->
-        raise " failed to listen on port #{Protohacker.MobMiddle.port()}, reason: #{inspect(reason)}"
+        raise " failed to listen on port #{MobMiddle.port()}, reason: #{inspect(reason)}"
     end
   end
 
   defp accept_loop(listen_socket) do
     case :gen_tcp.accept(listen_socket) do
       {:ok, socket} ->
-        Protohacker.MobMiddleV2.ConnectionSupervisor.start_child(socket)
+        ConnectionSupervisor.start_child(socket)
         accept_loop(listen_socket)
 
       {:error, reason} ->

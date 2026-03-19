@@ -1,4 +1,5 @@
 defmodule Protohacker.EchoServer do
+  @moduledoc false
   require Logger
   use GenServer
   @port 3001
