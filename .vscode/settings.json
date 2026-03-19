@@ -1,0 +1,14 @@
+{
+  "elixirLS.projectDir": ".",
+  "elixirLS.fetchDeps": true,
+  "elixirLS.suggestSpecs": true,
+  "elixirLS.dialyzerEnabled": true,
+  "elixirLS.dialyzerFormat": "dialyzer",
+  "elixirLS.signatureAfterComplete": true,
+  "files.associations": {
+    "*.ex": "elixir",
+    "*.exs": "elixir"
+  },
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "JakeBecker.elixir-ls"
+}
